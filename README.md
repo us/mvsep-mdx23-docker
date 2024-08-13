@@ -1,10 +1,15 @@
-# MVSep-MDX23 Colab Fork v2.4
+# MVSep-MDX23 Colab Fork v2.5
 Adaptation of MVSep-MDX23 algorithm for Colab, with few tweaks:
 
-https://colab.research.google.com/github/jarredou/MVSEP-MDX23-Colab_v2/blob/v2.4/MVSep-MDX23-Colab.ipynb
+https://colab.research.google.com/github/jarredou/MVSEP-MDX23-Colab_v2/blob/v2.4/MVSep-MDX23-Colab.ipynb  
+<br>  
 
-Recent changes:
-<font size=2>
+Recent changes:  
+
+
+**v2.5**
+* Kim's MelBand-Roformer model added  
+
 
 **v2.4**
 * BS-Roformer models from viperx added
@@ -15,13 +20,14 @@ Recent changes:
 * Better chunking algo (no clicks)
 * Some code cleaning
 
-
-
 </font>
 <br>
 
 <details>
     <summary>Full changelog :</summary>
+<br>
+<font size=2>
+<br>
 
 [**v2.3**](https://github.com/jarredou/MVSEP-MDX23-Colab_v2/tree/v2.3)
 * HQ3-Instr model replaced by VitLarge23 (thanks to MVSep)
@@ -29,10 +35,6 @@ Recent changes:
 * Improved BigShifts algo (v2)
 * BigShifts processing added to MDXv3 & VitLarge
 * Faster folder batch processing
-
-<br>
-<font size=2>
-<br>
 
 [**v2.2.2**](https://github.com/jarredou/MVSEP-MDX23-Colab_v2/tree/v2.2)
 * Improved MDXv3 chunking code (thanks to HymnStudio)
@@ -46,7 +48,7 @@ Recent changes:
 <br>
 
 **v2.2**
-* Added MDXv3 compatibility 
+* Added MDXv3 compatibility
 * Added MDXv3 demo model D1581 in vocals stem multiband ensemble.
 * Added VOC-FT Fullband SRS instead of UVR-MDX-Instr-HQ3.
 * Added 2stems feature : output only vocals/instrum (faster processing)
@@ -68,8 +70,10 @@ Recent changes:
 <br>
 </font>
 </details>
+<br>
 
----
-
-Original work by ZFTurbo/MVSep : https://github.com/ZFTurbo/MVSEP-MDX23-music-separation-model
-
+Credits:
+* [ZFTurbo/MVSep](https://github.com/ZFTurbo/MVSEP-MDX23-music-separation-model)
+* Models by [Demucs](https://github.com/facebookresearch/demucs), [Anjok](https://github.com/Anjok07/ultimatevocalremovergui), [Kimberley Jensen](https://github.com/KimberleyJensen), [aufr33](https://github.com/aufr33) & viperx
+* Adaptation & tweaks by [jarredou](https://github.com/jarredou/MVSEP-MDX23-Colab_v2/)
+</font>
