@@ -38,6 +38,7 @@ from modules.tfc_tdf_v2 import Conv_TDF_net_trim_model
 from modules.tfc_tdf_v3 import TFC_TDF_net, STFT
 from modules.segm_models import Segm_Models_Net
 from modules.bs_roformer import BSRoformer
+from modules.bs_roformer import MelBandRoformer
 
 
 
@@ -66,14 +67,19 @@ def get_model_from_config(model_type, config_path):
     with open(config_path) as f:
         config = ConfigDict(yaml.load(f, Loader=yaml.FullLoader))
         if model_type == 'mdx23c':
-            from modules.tfc_tdf_v3 import TFC_TDF_net
+            # from modules.tfc_tdf_v3 import TFC_TDF_net
             model = TFC_TDF_net(config)
         elif model_type == 'segm_models':
-            from modules.segm_models import Segm_Models_Net
+            # from modules.segm_models import Segm_Models_Net
             model = Segm_Models_Net(config)
         elif model_type == 'bs_roformer':
-            from modules.bs_roformer import BSRoformer
+            # from modules.bs_roformer import BSRoformer
             model = BSRoformer(
+                **dict(config.model)
+            )
+        elif model_type == 'mel_band_roformer':
+            # from modules.mel_band_roformer import MelBandRoformer
+            model = MelBandRoformer(
                 **dict(config.model)
             )
         else:
@@ -172,11 +178,9 @@ def demix_new(model, mix, device, config, dim_t=256):
         return {k: v for k, v in zip([config.training.target_instrument], estimated_sources)}
 
 
-def demix_new_wrapper(mix, device, model, config, dim_t=256):
-    if options["BigShifts"] <= 0:
+def demix_new_wrapper(mix, device, model, config, dim_t=256, bigshifts=1):
+    if bigshifts <= 0:
         bigshifts = 1
-    else:
-        bigshifts = options["BigShifts"]
 
     shift_in_samples = mix.shape[1] // bigshifts
     shifts = [x * shift_in_samples for x in range(bigshifts)]
@@ -475,7 +479,26 @@ class EnsembleDemucsMDXMusicSeparationModel:
         self.device = torch.device(device)
         self.model_bsrofo = self.model_bsrofo.to(device)
         self.model_bsrofo.eval()
-        
+
+        #Kim MelBand Rofo init
+        print("Loading Kim MelbandRoformer into memory")
+        model_name = "Kim_MelRoformer"
+        remote_url_melrofo = f'https://huggingface.co/KimberleyJSN/melbandroformer/resolve/main/MelBandRoformer.ckpt'
+        remote_url_conf_melrofo = f'https://raw.githubusercontent.com/ZFTurbo/Music-Source-Separation-Training/main/configs/KimberleyJensen/config_vocals_mel_band_roformer_kj.yaml'
+        if not os.path.isfile(model_folder+f'{model_name}.ckpt'):
+            torch.hub.download_url_to_file(remote_url_melrofo, model_folder+f'{model_name}.ckpt')
+        if not os.path.isfile(model_folder+f'{model_name}.yaml'):
+            torch.hub.download_url_to_file(remote_url_conf_melrofo, model_folder+f'{model_name}.yaml')
+
+        with open(model_folder + f'{model_name}.yaml') as f:
+            config_melrofo = ConfigDict(yaml.load(f, Loader=yaml.FullLoader))
+
+        self.model_melrofo = MelBandRoformer(**dict(config_melrofo.model))
+        self.config_melrofo = config_melrofo
+        self.model_melrofo.load_state_dict(torch.load(model_folder+f'{model_name}.ckpt'))
+        self.device = torch.device(device)
+        self.model_melrofo = self.model_melrofo.to(device)
+        self.model_melrofo.eval()        
         
         #MDXv3 init
         print("Loading InstVoc into memory")
@@ -597,6 +620,7 @@ class EnsembleDemucsMDXMusicSeparationModel:
 
         vocals_model_names = [
             "BSRoformer",
+            "Kim_MelRoformer",
             "InstVoc",
             "VitLarge",
             "VOCFT",
@@ -612,15 +636,21 @@ class EnsembleDemucsMDXMusicSeparationModel:
 
                 if model_name == "BSRoformer":
                     print(f'Processing vocals with {model_name} model...')
-                    sources_bs = demix_new_wrapper(mixed_sound_array.T, self.device, self.model_bsrofo, self.config_bsrofo, dim_t=1101)
+                    sources_bs = demix_new_wrapper(mixed_sound_array.T, self.device, self.model_bsrofo, self.config_bsrofo, dim_t=1101, bigshifts=options["BigShifts"])
                     vocals_bs = match_array_shapes(sources_bs, mixed_sound_array.T)
                     vocals_model_outputs.append(vocals_bs)
                     weights.append(options.get(f"weight_{model_name}"))
 
-
-                if model_name == "InstVoc":
+                elif model_name == "Kim_MelRoformer":
                     print(f'Processing vocals with {model_name} model...')
-                    sources3 = demix_new_wrapper(mixed_sound_array.T, self.device, self.model_mdxv3, self.config_mdxv3, dim_t=1024)
+                    sources_mel = demix_new_wrapper(mixed_sound_array.T, self.device, self.model_melrofo, self.config_melrofo, dim_t=1101, bigshifts=options["BigShifts"])
+                    vocals_mel = match_array_shapes(sources_mel, mixed_sound_array.T)
+                    vocals_model_outputs.append(vocals_mel)
+                    weights.append(options.get(f"weight_{model_name}"))
+
+                elif model_name == "InstVoc":
+                    print(f'Processing vocals with {model_name} model...')
+                    sources3 = demix_new_wrapper(mixed_sound_array.T, self.device, self.model_mdxv3, self.config_mdxv3, dim_t=2048, bigshifts=options["BigShifts"])
                     vocals3 = match_array_shapes(sources3, mixed_sound_array.T)
                     vocals_model_outputs.append(vocals3)
                     weights.append(options.get(f"weight_{model_name}"))
@@ -695,11 +725,13 @@ class EnsembleDemucsMDXMusicSeparationModel:
 
         vocals_combined /= np.sum(weights)
 
-        vocals_low = lr_filter(vocals_combined.T, 12000, 'lowpass') # * 1.01055  # remember to check if new final finetuned volume compensation is needed  !
-        vocals_high = lr_filter(vocals3.T, 12000, 'highpass')
+        if options['use_VOCFT']:
+            vocals_low = lr_filter(vocals_combined.T, 12000, 'lowpass') # * 1.01055  # remember to check if new final finetuned volume compensation is needed  !
+            vocals_high = lr_filter(vocals3.T, 12000, 'highpass')
         
-        vocals = vocals_low + vocals_high
-        #vocals = vocals_combined.T
+            vocals = vocals_low + vocals_high
+        else:
+            vocals = vocals_combined.T
 
         if options['filter_vocals'] is True:
                 vocals = lr_filter(vocals, 50, 'highpass', order=8)
@@ -927,14 +959,17 @@ if __name__ == '__main__':
     m.add_argument("--overlap_VitLarge", type=int, help="Overlap of splited audio for heavy models. Closer to 1.0 - slower", required=False, default=1)
     m.add_argument("--overlap_InstVoc", type=int, help="MDXv3 overlap", required=False, default=2)
     m.add_argument("--overlap_BSRoformer", type=int, help="BSRoformer overlap", required=False, default=2)
-    m.add_argument("--weight_InstVoc", type=float, help="Weight of MDXv3 model", required=False, default=4)
+    m.add_argument("--weight_InstVoc", type=float, help="Weight of MDXv3 model", required=False, default=3)
     m.add_argument("--weight_VOCFT", type=float, help="Weight of VOC-FT model", required=False, default=1)
     m.add_argument("--weight_InstHQ4", type=float, help="Weight of instHQ4 model", required=False, default=1)
     m.add_argument("--weight_VitLarge", type=float, help="Weight of VitLarge model", required=False, default=1)
-    m.add_argument("--weight_BSRoformer", type=float, help="Weight of BS-Roformer model", required=False, default=10)
+    m.add_argument("--weight_BSRoformer", type=float, help="Weight of BS-Roformer model", required=False, default=8)
+    m.add_argument("--weight_Kim_MelRoformer", type=float, help="Weight of Kim_MelRoformer model", required=False, default=10)
     m.add_argument("--BigShifts", type=int, help="Managing MDX 'BigShifts' trick value.", required=False, default=3)
     m.add_argument("--vocals_only",  action='store_true', help="Vocals + instrumental only")
     m.add_argument("--use_BSRoformer", action='store_true', help="use BSRoformer in vocal ensemble")
+    m.add_argument("--use_Kim_MelRoformer", action='store_true', help="use Kim MelBand Roformer in vocal ensemble")
+    
     m.add_argument("--BSRoformer_model", type=str, help="Which checkpoint to use", required=False, default="ep_317_1297")
     m.add_argument("--use_InstVoc", action='store_true', help="use instVoc in vocal ensemble")
     m.add_argument("--use_VitLarge", action='store_true', help="use VitLarge in vocal ensemble")
