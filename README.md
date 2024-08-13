@@ -9,11 +9,11 @@ https://colab.research.google.com/github/jarredou/MVSEP-MDX23-Colab_v2/blob/v2.5
 Recent changes:  
 
 
-**v2.5** (13 AUG 2024)  
+**v2.5** *(13 AUG 2024)*  
 * Kim's MelBand-Roformer model added  
 
 
-**v2.4**
+**v2.4** *(7 APR 2024)*  
 * BS-Roformer models from viperx added
 * MDX-InstHQ4 model added as optionnal
 * Flac output
