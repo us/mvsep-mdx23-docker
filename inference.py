@@ -629,7 +629,8 @@ class EnsembleDemucsMDXMusicSeparationModel:
 
         vocals_model_outputs = []
         weights = []
-
+        vocals3 = None
+        
         for model_name in vocals_model_names:
 
             if options[f"use_{model_name}"]:
