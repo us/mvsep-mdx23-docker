@@ -9,6 +9,9 @@ https://colab.research.google.com/github/jarredou/MVSEP-MDX23-Colab_v2/blob/v2.5
 Recent changes:  
 
 
+**v2.5.1** *(24 SEPT 2024)*  
+* better memory management (use `--large_gpu` to keep all models in memory)
+
 **v2.5** *(13 AUG 2024)*  
 * Kim's MelBand-Roformer model added  
 
