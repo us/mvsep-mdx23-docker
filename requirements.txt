@@ -4,7 +4,7 @@ scipy
 tqdm
 librosa
 demucs
-#onnxruntime-gpu # nighlty version installed within the notebook to fix cuda12.2 issue.
+onnxruntime-gpu
 torch
 pyyaml
 ml_collections
