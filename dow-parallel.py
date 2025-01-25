@@ -60,7 +60,7 @@ MODEL_URLS = {
     },
     "VR-DeEcho-Aggressive": {
         "ckpt": GITHUB_MIRROR + "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/VR-DeEcho-Aggressive.pth",
-        "yaml": GITHUB_MIRROR + "https://raw.githubusercontent.com/TRvlvr/application_data/main/mdx_model_data/mdx_c_configs/VR-DeEcho-Aggressive.yaml"
+        "yaml": "https://raw.githubusercontent.com/TRvlvr/application_data/main/mdx_model_data/mdx_c_configs/VR-DeEcho-Aggressive.yaml"
     },
     "MDX23C-8KFFT-InstVoc_HQ3": {
         "ckpt": GITHUB_MIRROR + "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/MDX23C-8KFFT-InstVoc_HQ3.ckpt",
