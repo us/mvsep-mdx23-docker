@@ -18,20 +18,20 @@ CHUNK_SIZE = 1024 * 1024  # 1MB chunks
 GITHUB_MIRROR = "https://mirror.ghproxy.com/"
 
 MODEL_URLS = {
-    # BS-Roformer models
+    # BS-Roformer models (keep original raw.githubusercontent.com URLs without mirror)
     "model_bs_roformer_ep_368_sdr_12.9628": {
         "ckpt": GITHUB_MIRROR + "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/model_bs_roformer_ep_368_sdr_12.9628.ckpt",
-        "yaml": GITHUB_MIRROR + "https://raw.githubusercontent.com/TRvlvr/application_data/main/mdx_model_data/mdx_c_configs/model_bs_roformer_ep_368_sdr_12.9628.yaml"
+        "yaml": "https://raw.githubusercontent.com/TRvlvr/application_data/main/mdx_model_data/mdx_c_configs/model_bs_roformer_ep_368_sdr_12.9628.yaml"
     },
     "model_bs_roformer_ep_317_sdr_12.9755": {
         "ckpt": GITHUB_MIRROR + "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/model_bs_roformer_ep_317_sdr_12.9755.ckpt",
-        "yaml": GITHUB_MIRROR + "https://raw.githubusercontent.com/TRvlvr/application_data/main/mdx_model_data/mdx_c_configs/model_bs_roformer_ep_317_sdr_12.9755.yaml"
+        "yaml": "https://raw.githubusercontent.com/TRvlvr/application_data/main/mdx_model_data/mdx_c_configs/model_bs_roformer_ep_317_sdr_12.9755.yaml"
     },
     
-    # Kim MelBand Roformer
+    # Keep HuggingFace URL as direct
     "Kim_MelRoformer": {
         "ckpt": "https://huggingface.co/KimberleyJSN/melbandroformer/resolve/main/MelBandRoformer.ckpt",
-        "yaml": GITHUB_MIRROR + "https://raw.githubusercontent.com/ZFTurbo/Music-Source-Separation-Training/main/configs/KimberleyJensen/config_vocals_mel_band_roformer_kj.yaml"
+        "yaml": "https://raw.githubusercontent.com/ZFTurbo/Music-Source-Separation-Training/main/configs/KimberleyJensen/config_vocals_mel_band_roformer_kj.yaml"
     },
     
     # InstVoc model
@@ -60,7 +60,7 @@ MODEL_URLS = {
     },
     "VR-DeEcho-Aggressive": {
         "ckpt": GITHUB_MIRROR + "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/VR-DeEcho-Aggressive.pth",
-        "yaml": GITHUB_MIRROR + "https://raw.githubusercontent.com/TRvlvr/application_data/main/mdx_model_data/mdx_c_configs/VR-DeEcho-Aggressive.yaml"
+        "yaml": "https://raw.githubusercontent.com/TRvlvr/application_data/main/mdx_model_data/mdx_c_configs/VR-DeEcho-Aggressive.yaml"
     },
     "MDX23C-8KFFT-InstVoc_HQ3": {
         "ckpt": GITHUB_MIRROR + "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/MDX23C-8KFFT-InstVoc_HQ3.ckpt",
