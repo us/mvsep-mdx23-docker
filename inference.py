@@ -1,12 +1,6 @@
 # coding: utf-8
 
-if __name__ == '__main__':
-    import os
-     
-    gpu_use = "0"
-
-    print('GPU use: {}'.format(gpu_use))
-    os.environ["CUDA_VISIBLE_DEVICES"] = "{}".format(gpu_use)
+import os
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -15,7 +9,6 @@ from tqdm import tqdm
 import numpy as np
 import torch
 import torch.nn as nn
-import os
 import argparse
 import soundfile as sf
 from demucs.states import load_model
@@ -34,6 +27,8 @@ import math
 import pathlib
 import warnings
 from scipy.signal import resample_poly
+import logging
+from pathlib import Path
 
 from modules.tfc_tdf_v2 import Conv_TDF_net_trim_model
 from modules.tfc_tdf_v3 import TFC_TDF_net, STFT
@@ -41,7 +36,9 @@ from modules.segm_models import Segm_Models_Net
 from modules.bs_roformer import BSRoformer
 from modules.bs_roformer import MelBandRoformer
 
-
+# Initialize logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def get_models(name, device, load=True, vocals_model_type=0):
     if vocals_model_type == 2:
@@ -68,18 +65,14 @@ def get_model_from_config(model_type, config_path):
     with open(config_path) as f:
         config = ConfigDict(yaml.load(f, Loader=yaml.FullLoader))
         if model_type == 'mdx23c':
-            # from modules.tfc_tdf_v3 import TFC_TDF_net
             model = TFC_TDF_net(config)
         elif model_type == 'segm_models':
-            # from modules.segm_models import Segm_Models_Net
             model = Segm_Models_Net(config)
         elif model_type == 'bs_roformer':
-            # from modules.bs_roformer import BSRoformer
             model = BSRoformer(
                 **dict(config.model)
             )
         elif model_type == 'mel_band_roformer':
-            # from modules.mel_band_roformer import MelBandRoformer
             model = MelBandRoformer(
                 **dict(config.model)
             )
@@ -396,21 +389,13 @@ class EnsembleDemucsMDXMusicSeparationModel:
                 model.to(self.device)
                 self.models.append(model)
 
-    def download_file_if_not_exists(self, remote_url, local_path):
-        """Downloads a file from a URL if it does not already exist."""
-        if not os.path.isfile(local_path):
-            torch.hub.download_url_to_file(remote_url, local_path)
-
-    
-
-    def load_model(self, model_name, remote_url_ckpt, remote_url_yaml, model_class):
-        """Downloads the model and config if needed, loads them into memory, and moves the model to the specified device."""
+    def load_model(self, model_name, model_class):
+        """Loads a model from the models directory"""
         ckpt_path = os.path.join(self.model_folder, f'{model_name}.ckpt')
         yaml_path = os.path.join(self.model_folder, f'{model_name}.yaml')
 
-        # Download model files if not present
-        self.download_file_if_not_exists(remote_url_ckpt, ckpt_path)
-        self.download_file_if_not_exists(remote_url_yaml, yaml_path)
+        if not os.path.exists(ckpt_path) or not os.path.exists(yaml_path):
+            raise FileNotFoundError(f"Model files not found for {model_name}. Please run download_models.py first.")
 
         # Load configuration
         with open(yaml_path, 'r') as f:
@@ -422,9 +407,9 @@ class EnsembleDemucsMDXMusicSeparationModel:
 
         # If the model requires a 'config' argument, pass the full config object
         if 'config' in model_args:
-            model = model_class(config=config)  # Pass full config if required
+            model = model_class(config=config)
         else:
-            model = model_class(**valid_config)  # Otherwise, pass filtered config
+            model = model_class(**valid_config)
 
         model.load_state_dict(torch.load(ckpt_path))
         model = model.to(self.device)
@@ -432,53 +417,42 @@ class EnsembleDemucsMDXMusicSeparationModel:
 
         return model, config
 
-
-
-    def load_onnx_model(self, model_path, remote_url):
-        """Downloads and initializes an ONNX model if not already present."""
-        if not os.path.isfile(model_path):
-            self.download_file_if_not_exists(remote_url, model_path)
+    def load_onnx_model(self, model_name):
+        """Loads an ONNX model from the models directory"""
+        model_path = os.path.join(self.model_folder, f'{model_name}.onnx')
+        
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"ONNX model {model_name} not found. Please run download_models.py first.")
+            
         return ort.InferenceSession(model_path, providers=self.providers, provider_options=[{"device_id": 0}])
 
     def initialize_model_if_needed(self, model_name, options):
-        """Loads a model only if it hasn't been initialized yet."""
+        """Loads a model only if it hasn't been initialized yet"""
         if model_name == "BSRoformer" and not hasattr(self, 'model_bsrofo'):
-            print(f'Loading {model_name} into memory')
+            logger.info(f'Loading {model_name} into memory')
             bs_model_name = "model_bs_roformer_ep_368_sdr_12.9628" if options["BSRoformer_model"] == "ep_368_1296" else "model_bs_roformer_ep_317_sdr_12.9755"
-            remote_url_ckpt = f'https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/{bs_model_name}.ckpt'
-            remote_url_yaml = f'https://raw.githubusercontent.com/TRvlvr/application_data/main/mdx_model_data/mdx_c_configs/{bs_model_name}.yaml'
-            self.model_bsrofo, self.config_bsrofo = self.load_model(bs_model_name, remote_url_ckpt, remote_url_yaml, BSRoformer)
+            self.model_bsrofo, self.config_bsrofo = self.load_model(bs_model_name, BSRoformer)
 
         elif model_name == "Kim_MelRoformer" and not hasattr(self, 'model_melrofo'):
-            print(f'Loading {model_name} into memory')
-            remote_url_ckpt = f'https://huggingface.co/KimberleyJSN/melbandroformer/resolve/main/MelBandRoformer.ckpt'
-            remote_url_yaml = f'https://raw.githubusercontent.com/ZFTurbo/Music-Source-Separation-Training/main/configs/KimberleyJensen/config_vocals_mel_band_roformer_kj.yaml'
-            self.model_melrofo, self.config_melrofo = self.load_model('Kim_MelRoformer', remote_url_ckpt, remote_url_yaml, MelBandRoformer)
+            logger.info(f'Loading {model_name} into memory')
+            self.model_melrofo, self.config_melrofo = self.load_model('Kim_MelRoformer', MelBandRoformer)
 
         elif model_name == "InstVoc" and not hasattr(self, 'model_mdxv3'):
-            print(f'Loading {model_name} into memory')
-            remote_url_ckpt = 'https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/MDX23C-8KFFT-InstVoc_HQ.ckpt'
-            remote_url_yaml = 'https://raw.githubusercontent.com/TRvlvr/application_data/main/mdx_model_data/mdx_c_configs/model_2_stem_full_band_8k.yaml'
-            self.model_mdxv3, self.config_mdxv3 = self.load_model('MDX23C-8KFFT-InstVoc_HQ', remote_url_ckpt, remote_url_yaml, TFC_TDF_net)
+            logger.info(f'Loading {model_name} into memory')
+            self.model_mdxv3, self.config_mdxv3 = self.load_model('MDX23C-8KFFT-InstVoc_HQ', TFC_TDF_net)
 
         elif model_name == "VitLarge" and not hasattr(self, 'model_vl'):
-            print(f'Loading {model_name} into memory')
-            remote_url_ckpt = 'https://github.com/ZFTurbo/Music-Source-Separation-Training/releases/download/v1.0.0/model_vocals_segm_models_sdr_9.77.ckpt'
-            remote_url_yaml = 'https://github.com/ZFTurbo/Music-Source-Separation-Training/releases/download/v1.0.0/config_vocals_segm_models.yaml'
-            self.model_vl, self.config_vl = self.load_model('model_vocals_segm_models_sdr_9.77', remote_url_ckpt, remote_url_yaml, Segm_Models_Net)
+            logger.info(f'Loading {model_name} into memory')
+            self.model_vl, self.config_vl = self.load_model('model_vocals_segm_models_sdr_9.77', Segm_Models_Net)
 
         elif model_name == "VOCFT" and not hasattr(self, 'infer_session1'):
-            print(f'Loading {model_name} into memory')
-            model_path = os.path.join(self.model_folder, 'UVR-MDX-NET-Voc_FT.onnx')
-            remote_url = 'https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/UVR-MDX-NET-Voc_FT.onnx'
-            self.infer_session1 = self.load_onnx_model(model_path, remote_url)
+            logger.info(f'Loading {model_name} into memory')
+            self.infer_session1 = self.load_onnx_model('UVR-MDX-NET-Voc_FT')
             self.mdx_models1 = get_models('tdf_extra', load=False, device=self.device, vocals_model_type=2)
 
         elif model_name == "InstHQ4" and not hasattr(self, 'infer_session2'):
-            print(f'Loading {model_name} into memory')
-            model_path = os.path.join(self.model_folder, 'UVR-MDX-NET-Inst_HQ_4.onnx')
-            remote_url = 'https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/UVR-MDX-NET-Inst_HQ_4.onnx'
-            self.infer_session2 = self.load_onnx_model(model_path, remote_url)
+            logger.info(f'Loading {model_name} into memory')
+            self.infer_session2 = self.load_onnx_model('UVR-MDX-NET-Inst_HQ_4')
             self.mdx_models2 = get_models('tdf_extra', load=False, device=self.device, vocals_model_type=3)
 
     @property
