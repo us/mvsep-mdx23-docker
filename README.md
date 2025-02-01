@@ -1,84 +1,107 @@
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/Q5Q811R5YI)  
-# MVSep-MDX23 Colab Fork v2.5
+# MVSEP-MDX23-Docker
 
-Adaptation of MVSep-MDX23 algorithm for Colab, with few tweaks:
+A Docker-based implementation of the MVSEP-MDX23 music source separation model. This project containerizes the powerful MVSEP-MDX23 model that can separate vocals and instruments from mixed audio tracks, making it easy to deploy and run in any environment.
 
-https://colab.research.google.com/github/jarredou/MVSEP-MDX23-Colab_v2/blob/v2.5/MVSep-MDX23-Colab.ipynb  
-<br>  
+## Features
 
-Recent changes:  
+- **Docker Integration**:
+  - Containerized environment for easy deployment
+  - GPU support through NVIDIA Container Toolkit
+  - Consistent runtime environment across platforms
 
+- **Multiple Separation Modes**:
+  - Vocals/Instrumental separation
+  - 4-STEMS separation (vocals, drums, bass, other)
 
-**v2.5.1** *(24 SEPT 2024)*  
-* better memory management (use `--large_gpu` to keep all models in memory during folder batch processing)
+- **Advanced Model Ensemble**:
+  - BSRoformer
+  - Kim MelRoformer
+  - InstVoc
+  - VitLarge (optional)
+  - InstHQ4 (optional)
+  - VOCFT (optional)
+  - Demucs models (for 4-STEMS mode)
 
-**v2.5** *(13 AUG 2024)*  
-* Kim's MelBand-Roformer model added  
+- **Customizable Settings**:
+  - Adjustable model weights for ensemble
+  - Input gain control
+  - Output format selection (PCM_16, FLOAT, FLAC)
+  - Overlap control for different models
+  - BigShifts feature for improved separation
+  - Optional vocal filtering below 50Hz
+  - Gain restoration option
 
+## Requirements
 
-**v2.4** *(7 APR 2024)*  
-* BS-Roformer models from viperx added
-* MDX-InstHQ4 model added as optionnal
-* Flac output
-* Control input volume gain
-* Filter vocals below 50Hz option
-* Better chunking algo (no clicks)
-* Some code cleaning
+- Docker
+- NVIDIA GPU with CUDA support
+- NVIDIA Container Toolkit (for GPU support)
 
-</font>
-<br>
+## Installation
 
-<details>
-    <summary>Full changelog :</summary>
-<br>
-<font size=2>
-<br>
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/mvsep-mdx23-docker.git
+cd mvsep-mdx23-docker
+```
 
-[**v2.3**](https://github.com/jarredou/MVSEP-MDX23-Colab_v2/tree/v2.3)
-* HQ3-Instr model replaced by VitLarge23 (thanks to MVSep)
-* Improved MDXv2 processing (thanks to Anjok)
-* Improved BigShifts algo (v2)
-* BigShifts processing added to MDXv3 & VitLarge
-* Faster folder batch processing
+2. Build the Docker image:
+```bash
+python utils/download_models.py
+docker build -t mvsep-mdx23 .
+```
 
-[**v2.2.2**](https://github.com/jarredou/MVSEP-MDX23-Colab_v2/tree/v2.2)
-* Improved MDXv3 chunking code (thanks to HymnStudio)
-* D1581 demo model replaced by new InstVocHQ MDXv3 model.
-<br>
+## Usage
 
-**v2.2.1**
-* Added custom weights feature
-* Fixed some bugs
-* Fixed input: you can use a file or a folder as input now
-<br>
+### Docker Run
 
-**v2.2**
-* Added MDXv3 compatibility
-* Added MDXv3 demo model D1581 in vocals stem multiband ensemble.
-* Added VOC-FT Fullband SRS instead of UVR-MDX-Instr-HQ3.
-* Added 2stems feature : output only vocals/instrum (faster processing)
-* Added 16bit output format option
-* Added "BigShift trick" for MDX models
-* Added separated overlap values for MDX, MDXv3 and Demucs
-* Fixed volume compensation fine-tuning for MDX-VOC-FT
-<br>
+Basic usage:
+```bash
+docker run --gpus all -v /path/to/input:/input -v /path/to/output:/output mvsep-mdx23 \
+    --input_audio "/input/audio.mp3" \
+    --output_folder "/output"
+```
 
-[**v2.1 (by deton24)**](https://github.com/deton24/MVSEP-MDX23-Colab_v2.1)
-* Updated with MDX-VOC-FT instead of Kim Vocal 2
-<br>
+Advanced usage with custom parameters:
+```bash
+docker run --gpus all -v /path/to/input:/input -v /path/to/output:/output mvsep-mdx23 \
+    --input_audio "/input/audio.mp3" \
+    --output_folder "/output" \
+    --BSRoformer_model "ep_368_1296" \
+    --weight_BSRoformer 9.18 \
+    --weight_Kim_MelRoformer 10 \
+    --weight_InstVoc 3.39 \
+    --output_format "FLAC" \
+    --BigShifts 3 \
+    --input_gain 0
+```
 
-[**v2.0**](https://github.com/jarredou/MVSEP-MDX23-Colab_v2/tree/2.0)
-* Updated with new Kim Vocal 2 & UVR-MDX-Instr-HQ3 models
-* Folder batch processing
-* Fixed high frequency bleed in vocals
-* Fixed volume compensation for MDX models
-<br>
-</font>
-</details>
-<br>
+### Parameters
 
-Credits:
-* [ZFTurbo/MVSep](https://github.com/ZFTurbo/MVSEP-MDX23-music-separation-model)
-* Models by [Demucs](https://github.com/facebookresearch/demucs), [Anjok](https://github.com/Anjok07/ultimatevocalremovergui), [Kimberley Jensen](https://github.com/KimberleyJensen), [aufr33](https://github.com/aufr33) & viperx
-* Adaptation & tweaks by [jarredou](https://github.com/jarredou/MVSEP-MDX23-Colab_v2/)
-</font>
+- `--input_audio`: Path to input audio file (inside container)
+- `--output_folder`: Path to output directory (inside container)
+- `--output_format`: Output format (PCM_16, FLOAT, or FLAC)
+- `--vocals_only`: Only separate vocals/instrumental (omit for 4-STEMS mode)
+- `--input_gain`: Input volume gain (dB)
+- `--restore_gain`: Restore original gain after separation
+- `--filter_vocals`: Remove audio below 50Hz in vocals stem
+- `--BigShifts`: Number of shifts for improved separation (1-41)
+
+Model-specific parameters:
+- `--BSRoformer_model`: Model version (ep_317_1297 or ep_368_1296)
+- `--weight_BSRoformer`: Weight for BSRoformer model (0-10)
+- `--weight_Kim_MelRoformer`: Weight for Kim MelRoformer model (0-10)
+- `--weight_InstVoc`: Weight for InstVoc model (0-10)
+- `--use_VitLarge`: Enable VitLarge model
+- `--weight_VitLarge`: Weight for VitLarge model (0-10)
+- `--use_InstHQ4`: Enable InstHQ4 model
+- `--weight_InstHQ4`: Weight for InstHQ4 model (0-10)
+- `--use_VOCFT`: Enable VOCFT model
+- `--weight_VOCFT`: Weight for VOCFT model (0-10)
+
+### Environment Variables
+
+The following environment variables can be set when running the container:
+- `AWS_ACCESS_KEY_ID`: Access key ID for AWS
+- `AWS_SECRET_ACCESS_KEY`: Secret access key for AWS
+- `AWS_REGION`: AWS region
