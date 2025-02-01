@@ -5,7 +5,9 @@ tqdm
 librosa
 demucs
 onnxruntime-gpu
-torch
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.4.1
+torchaudio==2.4.1
 pyyaml
 ml_collections
 #pytorch_lightning

@@ -1,6 +1,6 @@
 # Specify the CUDA and Ubuntu versions as build arguments.
 # You can later override CUDA_VERSION with any value between 12.2.0 and 12.9.0
-ARG CUDA_VERSION=12.2.0
+ARG CUDA_VERSION=12.4.0
 ARG UBUNTU_VERSION=22.04
 
 # Use the CUDA runtime image (if you need extra development tools, replace "runtime" with "devel")
