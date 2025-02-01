@@ -83,12 +83,7 @@ async def download_file(session: aiohttp.ClientSession, url: str, dest_path: Pat
                         f.write(chunk)
                         progress.update(len(chunk))
                 
-                # Verify file size after download
-                if dest_path.stat().st_size < 1024:  # Basic size validation
-                    logger.warning(f"Downloaded file too small, retrying: {dest_path.name}")
-                    dest_path.unlink()
-                    continue
-                    
+                # Remove file size check to accept any file size once downloaded.
                 return
                 
         except (aiohttp.ClientError, asyncio.TimeoutError) as e:
