@@ -26,7 +26,6 @@ import sys
 import math
 import pathlib
 import warnings
-from scipy.signal import resample_poly
 import logging
 from pathlib import Path
 
@@ -367,7 +366,6 @@ class EnsembleDemucsMDXMusicSeparationModel:
         self.model_folder = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'models')
         
         self.options = options
-
 
         # Execution providers for ONNX
         if self.device == 'cpu':

@@ -8,6 +8,7 @@ FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${UBUNTU_VERSION}
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/
 
 # Install system dependencies
 RUN apt-get update && \
@@ -24,14 +25,19 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-WORKDIR /workspace
+WORKDIR /
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
+# Install Python dependencies
+COPY builder/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy source code
-COPY . .
+# Create and copy model files
+COPY models/ /models/
 
-# Set default command
-CMD ["python3", "-u", "inference.py"] 
+# Copy handler code
+COPY src/handler.py .
+COPY src/inference.py .
+COPY src/modules/ ./modules/
+
+# Set default command to run handler
+CMD [ "python3", "-u", "/handler.py" ] 
