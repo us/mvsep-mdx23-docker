@@ -228,7 +228,7 @@ def demix_vitlarge(model, mix, device):
         return {k: v for k, v in zip([model.config.training.target_instrument], estimated_sources.cpu().numpy())}
 
 
-def demix_full_vitlarge(mix, device, model):
+def demix_full_vitlarge(options, mix, device, model):
     if options["BigShifts"] <= 0:
         bigshifts = 1
     else:
@@ -392,11 +392,27 @@ class EnsembleDemucsMDXMusicSeparationModel:
 
     def load_model(self, model_name, model_class):
         """Loads a model from the models directory"""
-        ckpt_path = os.path.join(self.model_folder, f'{model_name}.ckpt')
-        yaml_path = os.path.join(self.model_folder, f'{model_name}.yaml')
+        # Special handling for model file names that differ from model_name
+        if model_name == 'Kim_MelRoformer':
+            ckpt_path = os.path.join(self.model_folder, 'MelBandRoformer.ckpt')
+            yaml_path = os.path.join(self.model_folder, 'config_vocals_mel_band_roformer_kj.yaml')
+        elif model_name == 'BSRoformer':
+            # Choose BSRoformer model version based on options
+            bs_model_name = "model_bs_roformer_ep_368_sdr_12.9628" if self.options["BSRoformer_model"] == "ep_368_1296" else "model_bs_roformer_ep_317_sdr_12.9755"
+            ckpt_path = os.path.join(self.model_folder, f'{bs_model_name}.ckpt')
+            yaml_path = os.path.join(self.model_folder, f'{bs_model_name}.yaml')
+        else:
+            ckpt_path = os.path.join(self.model_folder, f'{model_name}.ckpt')
+            # Special handling for models with different yaml names
+            if model_name == 'MDX23C-8KFFT-InstVoc_HQ':
+                yaml_path = os.path.join(self.model_folder, 'model_2_stem_full_band_8k.yaml')
+            elif model_name == 'model_vocals_segm_models_sdr_9.77':
+                yaml_path = os.path.join(self.model_folder, 'config_vocals_segm_models.yaml')
+            else:
+                yaml_path = os.path.join(self.model_folder, f'{model_name}.yaml')
 
         if not os.path.exists(ckpt_path) or not os.path.exists(yaml_path):
-            raise FileNotFoundError(f"Model files not found for {model_name}. Please run download_models.py first.")
+            raise FileNotFoundError(f"Model files not found for {model_name}. Please run download_models.py first.\nLooking for:\n- {ckpt_path}\n- {yaml_path}")
 
         # Load configuration
         with open(yaml_path, 'r') as f:
@@ -463,7 +479,7 @@ class EnsembleDemucsMDXMusicSeparationModel:
         else:
             return ['vocals']
 
-    def separate_music_file(self, mixed_sound_array, sample_rate, current_file_number=0, total_files=0):
+    def separate_music_file(self, options, mixed_sound_array, sample_rate, current_file_number=0, total_files=0):
         """
         Implements the sound separation for a single sound file
         Inputs: Outputs from soundfile.read('mixture.wav')
@@ -545,7 +561,7 @@ class EnsembleDemucsMDXMusicSeparationModel:
 
                 elif model_name == "VitLarge":
                     print(f'Processing vocals with {model_name} model...')
-                    vocals4, instrum4 = demix_full_vitlarge(mixed_sound_array.T, self.device, self.model_vl)#, self.config_vl, dim_t=512)
+                    vocals4, instrum4 = demix_full_vitlarge(options, mixed_sound_array.T, self.device, self.model_vl)#, self.config_vl, dim_t=512)
                     vocals4 = match_array_shapes(vocals4, mixed_sound_array.T)
                     vocals_model_outputs.append(vocals4)
                     if not options['large_gpu']:
@@ -782,7 +798,7 @@ def predict_with_model(options):
             audio = dBgain(audio, options['input_gain'])
 
         print("Input audio: {} Sample rate: {}".format(audio.shape, sr))
-        result, sample_rates = model.separate_music_file(audio.T, sr, i, len(options['input_audio']))
+        result, sample_rates = model.separate_music_file(options, audio.T, sr, i, len(options['input_audio']))
         
         for instrum in model.instruments:
             output_name = os.path.splitext(os.path.basename(input_audio))[0] + '_{}.{}'.format(instrum, output_extension)

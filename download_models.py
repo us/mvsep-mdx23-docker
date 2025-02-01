@@ -52,8 +52,50 @@ MODEL_URLS = {
     },
     "UVR-MDX-NET-Inst_HQ_4": {
         "onnx": GITHUB_MIRROR + "https://github.com/TRvlvr/model_repo/releases/download/all_public_uvr_models/UVR-MDX-NET-Inst_HQ_4.onnx"
+    },
+
+    # Demucs YAML configs
+    "htdemucs_ft": {
+        "yaml": "https://raw.githubusercontent.com/facebookresearch/demucs/main/demucs/remote/htdemucs_ft.yaml"
+    },
+    "htdemucs": {
+        "yaml": "https://raw.githubusercontent.com/facebookresearch/demucs/main/demucs/remote/htdemucs.yaml"
+    },
+    "htdemucs_6s": {
+        "yaml": "https://raw.githubusercontent.com/facebookresearch/demucs/main/demucs/remote/htdemucs_6s.yaml"
+    },
+    "hdemucs_mmi": {
+        "yaml": "https://raw.githubusercontent.com/facebookresearch/demucs/main/demucs/remote/hdemucs_mmi.yaml"
     }
 }
+
+# Add Demucs MDX models
+MDX_MODELS = [
+    "0d19c1c6-0f06f20e.th", "5d2d6c55-db83574e.th", "7d865c68-3d5dd56b.th", "7ecf8ec1-70f50cc9.th",
+    "a1d90b5c-ae9d2452.th", "c511e2ab-fe698775.th", "cfa93e08-61801ae1.th", "e51eebcc-c1b80bdd.th",
+    "6b9c2ca1-3fd82607.th", "b72baf4e-8778635e.th", "42e558d4-196e0e1b.th", "305bc58f-18378783.th",
+    "14fc6a69-a89dd0ee.th", "464b36d7-e5a9386e.th", "7fd6ef75-a905dd85.th", "83fc094f-4a16d450.th",
+    "1ef250f1-592467ce.th", "902315c2-b39ce9c9.th", "9a6b4851-03af0aa6.th", "fa0cb7f9-100d8bf4.th"
+]
+
+# Add Hybrid Transformer models
+HT_MODELS = [
+    "955717e8-8726e21a.th", "f7e0c4bc-ba3fe64a.th", "d12395a8-e57c48e6.th", "92cfc3b6-ef3bcb9c.th",
+    "04573f0d-f3cf25b2.th", "75fc33f5-1941ce65.th", "5c90dfd2-34c22ccb.th"
+]
+
+# Add models to MODEL_URLS
+for model in MDX_MODELS:
+    MODEL_URLS[f"demucs_mdx_{model}"] = {
+        "model": f"https://dl.fbaipublicfiles.com/demucs/mdx_final/{model}"
+    }
+
+for model in HT_MODELS:
+    MODEL_URLS[f"demucs_ht_{model}"] = {
+        "model": f"https://dl.fbaipublicfiles.com/demucs/hybrid_transformer/{model}"
+    }
+
+# Note: Experimental model removed as URL is no longer accessible
 
 async def download_file(session: aiohttp.ClientSession, url: str, dest_path: Path) -> None:
     """Asynchronous file download with progress tracking and retry mechanism"""

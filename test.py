@@ -1,4 +1,4 @@
-import runpod
+# import runpod
 import os
 import json
 import traceback
@@ -162,5 +162,54 @@ def handler(event):
         cleanup_workspace(workspace_dir)
 
 if __name__ == "__main__":
-    runpod.serverless.start({"handler": handler}) 
+    handler({
+    "id": "shit_separation_test_multi2",
+    "input": {
+        "audio_url": "s3://vocal-remover-runpod-version/test.mp3",
+        "output_bucket": "vocal-remover-runpod-version",
+        "output_prefix": "test_output",
+         "output_format": "MP3",  # Changed to match colab's FLAC setting
+        "options": {
+            # Core separation settings
+            "vocals_only": True,      # Set for Vocals/Instrumental mode
+            "input_gain": 0,
+            "restore_gain": False,
+            "filter_vocals": False,   # Matches filter_vocals_below_50hz
+            "BigShifts": 3,
+            
+            # Model weights and settings
+            "use_BSRoformer": True,   # Enabled based on colab forced use
+            "BSRoformer_model": "ep_368_1296",  # Updated to match colab
+            "weight_BSRoformer": 9.18,
+            
+            "use_Kim_MelRoformer": True,  # Enabled based on colab forced use
+            "weight_Kim_MelRoformer": 10.0,
+            
+            "use_InstVoc": True,      # Enabled based on colab forced use
+            "weight_InstVoc": 3.39,
+            
+            "use_VitLarge": False,    # Matches colab setting
+            "weight_VitLarge": 1.0,
+            
+            "use_InstHQ4": False,     # Matches colab setting
+            "weight_InstHQ4": 2.0,
+            "overlap_InstHQ4": 0.1,
+            
+            "use_VOCFT": False,       # Matches colab setting
+            "weight_VOCFT": 2.0,
+            "overlap_VOCFT": 0.1,
+            
+            # Overlap settings
+            "overlap_demucs": 0.6,    # Matches colab setting
+            "overlap_InstVoc": 0.8,   # Kept from your original config
+            "overlap_VitLarge": 0.8,  # Kept from your original config
+            
+            # Additional settings from your config
+            "large_gpu": True,
+            "single_onnx": False,
+            "cpu": False
+        }
+    }
+})
+    # runpod.serverless.start({"handler": handler}) 
     

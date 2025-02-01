@@ -33,8 +33,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy source code
 COPY . .
 
-# Create models directory and copy pre-downloaded models
-COPY models/* /workspace/models/
-
 # Set default command
 CMD ["python3", "-u", "inference.py"] 
