@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 RETRY_COUNT = 5
 RETRY_DELAY = 2  # seconds
 CHUNK_SIZE = 1024 * 1024  # 1MB chunks
-GITHUB_MIRROR = "https://mirror.ghproxy.com/"  # GitHub mirror for faster downloads
+GITHUB_MIRROR = "https://ghfast.top"  # GitHub mirror for faster downloads
 
 MODEL_URLS = {
     # BS-Roformer models
