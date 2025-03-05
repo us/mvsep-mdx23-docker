@@ -37,6 +37,7 @@ COPY models/ /models/
 # Copy handler code
 COPY src/handler.py .
 COPY src/inference.py .
+
 COPY src/modules/ ./modules/
 
 # Set default command to run handler

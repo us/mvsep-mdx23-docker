@@ -14,6 +14,8 @@ import static_ffmpeg
 from pydub import AudioSegment
 import librosa
 import shutil
+import firebase_admin
+from firebase_admin import credentials, messaging
 
 from inference import EnsembleDemucsMDXMusicSeparationModel, predict_with_model
 
@@ -29,6 +31,75 @@ logger = logging.getLogger(__name__)
 
 # Global model instance
 MODEL = None
+# Firebase app instance
+FIREBASE_APP = None
+
+def download_from_s3(s3_client, s3_url, local_path):
+    """Download a file from S3 to a local path"""
+    logger.info(f"Downloading from S3: {s3_url} to {local_path}")
+    try:
+        bucket_name, key = s3_url.replace("s3://", "").split("/", 1)
+        s3_client.download_file(bucket_name, key, local_path)
+        return True
+    except Exception as e:
+        logger.error(f"Error downloading from S3: {str(e)}")
+        return False
+
+def init_firebase(s3_client=None, credentials_s3_url=None, workspace_dir=None):
+    """Initialize Firebase app with service account credentials from S3 or local path"""
+    global FIREBASE_APP
+    
+    if FIREBASE_APP is not None:
+        # Already initialized
+        return True
+        
+    try:
+        # Determine credentials path
+        cred_path = None
+        
+        # If S3 URL is provided, download the credentials
+        if credentials_s3_url and s3_client and workspace_dir:
+            local_cred_path = os.path.join(workspace_dir, "firebase_credentials.json")
+            if download_from_s3(s3_client, credentials_s3_url, local_cred_path):
+                cred_path = local_cred_path
+                logger.info(f"Downloaded Firebase credentials from {credentials_s3_url}")
+        
+
+        # Initialize Firebase with credentials
+        cred = credentials.Certificate(cred_path)
+        FIREBASE_APP = firebase_admin.initialize_app(cred)
+        logger.info(f"Firebase initialized successfully with credentials from {cred_path}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to initialize Firebase: {str(e)}")
+        return False
+
+def send_notification(token, title, body, data=None):
+    """Send a Firebase Cloud Messaging notification"""
+    if not FIREBASE_APP:
+        logger.warning("Firebase not initialized, skipping notification")
+        return False
+    
+    try:
+        if not token:
+            logger.warning("No FCM token provided, skipping notification")
+            return False
+            
+        message = messaging.Message(
+            notification=messaging.Notification(
+                title=title,
+                body=body
+            ),
+            data=data or {},
+            token=token
+        )
+        
+        response = messaging.send(message)
+        logger.info(f"Successfully sent notification: {response}")
+        return True
+    except Exception as e:
+        logger.error(f"Error sending notification: {str(e)}")
+        return False
 
 def init_model(options):
     """Initialize the model with given options"""
@@ -87,17 +158,37 @@ def handler(event):
     workspace_dir = create_workspace()
     logger.info(f"Created workspace directory: {workspace_dir}")
     
-    try:
-        # Initialize S3 client
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-            region_name=os.getenv("AWS_REGION")
+    # Extract notification settings from input
+    input_data = event.get("input", {})
+    notification_config = input_data.get("notification", {})
+    fcm_token = notification_config.get("fcm_token")
+    enable_notifications = bool(fcm_token) and notification_config.get("enabled", False)
+    firebase_creds_url = notification_config.get("credentials_url")
+    
+    # Initialize S3 client (moved up to use for Firebase credentials download)
+    s3_client = boto3.client(
+        's3',
+        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        region_name=os.getenv("AWS_REGION")
+    )
+    
+    # Initialize Firebase if notifications are enabled
+    if enable_notifications:
+        init_firebase(s3_client, firebase_creds_url, workspace_dir)
+    
+    # Send notification that processing has started
+    if enable_notifications:
+        job_id = event.get("id", "unknown")
+        send_notification(
+            fcm_token,
+            "Processing Started",
+            f"Audio separation job {job_id} has started processing",
+            {"job_id": job_id, "status": "started"}
         )
-
+    
+    try:
         # Extract input parameters
-        input_data = event["input"]
         audio_url = input_data["audio_url"]
         job_id = event["id"]
         output_bucket = input_data.get("output_bucket")
@@ -110,6 +201,15 @@ def handler(event):
         input_path = os.path.join(workspace_dir, "input" + os.path.splitext(key)[1])
         logger.info(f"Downloading from S3: {audio_url}")
         s3_client.download_file(bucket_name, key, input_path)
+        
+        # Send notification that file download completed
+        if enable_notifications:
+            send_notification(
+                fcm_token,
+                "File Downloaded",
+                f"Audio file for job {job_id} has been downloaded and is being prepared",
+                {"job_id": job_id, "status": "downloaded"}
+            )
 
         # Process audio file
         processed_path = process_audio_file(input_path, workspace_dir)
@@ -117,6 +217,15 @@ def handler(event):
         # Get sample rate for output
         audio_info = sf.info(processed_path)
         sample_rate = audio_info.samplerate
+        
+        # Send notification that processing is starting
+        if enable_notifications:
+            send_notification(
+                fcm_token,
+                "Model Processing",
+                f"Audio separation for job {job_id} is now being processed by the model",
+                {"job_id": job_id, "status": "processing"}
+            )
 
         # Set up model options
         options.update({
@@ -145,6 +254,21 @@ def handler(event):
                 logger.info(f"Uploading result: {output_file}")
                 s3_client.upload_file(local_path, output_bucket, s3_key)
                 output_urls["s3"][output_file] = f"s3://{output_bucket}/{s3_key}"
+        
+        # Send completion notification with output details
+        if enable_notifications:
+            file_count = len(output_files)
+            send_notification(
+                fcm_token,
+                "Processing Complete",
+                f"Audio separation job {job_id} completed successfully with {file_count} output files",
+                {
+                    "job_id": job_id, 
+                    "status": "completed",
+                    "file_count": str(file_count),
+                    "sample_rate": str(sample_rate)
+                }
+            )
 
         return {
             "output": output_urls,
@@ -155,6 +279,16 @@ def handler(event):
         logger.error(f"Error in handler: {str(e)}")
         exec_error = traceback.format_exc()
         print(exec_error)
+        
+        # Send error notification
+        if enable_notifications:
+            send_notification(
+                fcm_token,
+                "Processing Error",
+                f"Error processing job {event.get('id', 'unknown')}: {str(e)}",
+                {"job_id": event.get("id", "unknown"), "status": "error", "error": str(e)}
+            )
+            
         return {"error": str(e)}
 
     finally:

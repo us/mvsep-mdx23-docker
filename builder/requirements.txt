@@ -20,3 +20,4 @@ moviepy
 runpod 
 static_ffmpeg 
 pydub 
+firebase-admin
