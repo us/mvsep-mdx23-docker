@@ -177,16 +177,6 @@ def handler(event):
     if enable_notifications:
         init_firebase(s3_client, firebase_creds_url, workspace_dir)
     
-    # Send notification that processing has started
-    if enable_notifications:
-        job_id = event.get("id", "unknown")
-        send_notification(
-            fcm_token,
-            "Processing Started",
-            f"Audio separation job {job_id} has started processing",
-            {"job_id": job_id, "status": "started"}
-        )
-    
     try:
         # Extract input parameters
         audio_url = input_data["audio_url"]
@@ -196,21 +186,15 @@ def handler(event):
         output_format = input_data.get("output_format", "FLOAT")
         options = input_data.get("options", {})
 
+        # Extract song name from the audio URL
+        song_name = os.path.basename(audio_url).split('.')[0]
+        
         # Download input file
         bucket_name, key = audio_url.replace("s3://", "").split("/", 1)
         input_path = os.path.join(workspace_dir, "input" + os.path.splitext(key)[1])
         logger.info(f"Downloading from S3: {audio_url}")
         s3_client.download_file(bucket_name, key, input_path)
         
-        # Send notification that file download completed
-        if enable_notifications:
-            send_notification(
-                fcm_token,
-                "File Downloaded",
-                f"Audio file for job {job_id} has been downloaded and is being prepared",
-                {"job_id": job_id, "status": "downloaded"}
-            )
-
         # Process audio file
         processed_path = process_audio_file(input_path, workspace_dir)
         
@@ -218,15 +202,6 @@ def handler(event):
         audio_info = sf.info(processed_path)
         sample_rate = audio_info.samplerate
         
-        # Send notification that processing is starting
-        if enable_notifications:
-            send_notification(
-                fcm_token,
-                "Model Processing",
-                f"Audio separation for job {job_id} is now being processed by the model",
-                {"job_id": job_id, "status": "processing"}
-            )
-
         # Set up model options
         options.update({
             "input_audio": [processed_path],
@@ -255,17 +230,16 @@ def handler(event):
                 s3_client.upload_file(local_path, output_bucket, s3_key)
                 output_urls["s3"][output_file] = f"s3://{output_bucket}/{s3_key}"
         
-        # Send completion notification with output details
+        # Send completion notification with new message format
         if enable_notifications:
-            file_count = len(output_files)
             send_notification(
                 fcm_token,
-                "Processing Complete",
-                f"Audio separation job {job_id} completed successfully with {file_count} output files",
+                f"'{song_name}' is ready!",
+                f"Vocals and instruments have been successfully separated ✅",
                 {
                     "job_id": job_id, 
                     "status": "completed",
-                    "file_count": str(file_count),
+                    "file_count": str(len(output_files)),
                     "sample_rate": str(sample_rate)
                 }
             )
@@ -280,12 +254,19 @@ def handler(event):
         exec_error = traceback.format_exc()
         print(exec_error)
         
-        # Send error notification
+        # Extract song name for error message
+        try:
+            audio_url = input_data.get("audio_url", "")
+            song_name = os.path.basename(audio_url).split('.')[0]
+        except:
+            song_name = "Unknown"
+        
+        # Send error notification with new message format
         if enable_notifications:
             send_notification(
                 fcm_token,
-                "Processing Error",
-                f"Error processing job {event.get('id', 'unknown')}: {str(e)}",
+                f"Error: Separation failed",
+                f"Separation failed for '{song_name}'. Please try again later ❌",
                 {"job_id": event.get("id", "unknown"), "status": "error", "error": str(e)}
             )
             
