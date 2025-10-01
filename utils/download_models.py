@@ -7,6 +7,9 @@ from typing import Dict
 import aiohttp
 import asyncio
 from functools import partial
+from huggingface_hub import snapshot_download   # <— added
+
+import pkg_resources
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -95,6 +98,9 @@ for model in HT_MODELS:
         "model": f"https://dl.fbaipublicfiles.com/demucs/hybrid_transformer/{model}"
     }
 
+
+
+
 # Note: Experimental model removed as URL is no longer accessible
 
 async def download_file(session: aiohttp.ClientSession, url: str, dest_path: Path) -> None:
@@ -162,9 +168,36 @@ async def download_all_models(model_dir: str = "models"):
         else:
             logger.info("All models already downloaded!")
 
+
+# ---- Whisper configuration ----
+# You can include multiple sizes if needed
+WHISPER_MODELS = ["large-v3"]   # change or add: ["tiny","base","small","medium","large-v3"]
+WHISPER_CACHE_DIR = "./models"
+
+# ---------------- Download Logic ----------------
+def download_whisper_models():
+    """
+    Download specified Whisper models using huggingface_hub
+    into WHISPER_CACHE_DIR.
+    """
+    Path(WHISPER_CACHE_DIR).mkdir(parents=True, exist_ok=True)
+    for size in WHISPER_MODELS:
+        target = Path(WHISPER_CACHE_DIR) / size
+        if target.exists():
+            logger.info(f"Whisper model '{size}' already exists, skipping.")
+            continue
+        logger.info(f"Downloading Whisper model '{size}' to {target}")
+        snapshot_download(
+            repo_id=f"openai/whisper-{size}",
+            local_dir=str(target),
+            force_download=True
+        )
+    logger.info("All Whisper models downloaded successfully.")
+
 def install_dependencies():
     """Install required packages automatically"""
-    required = {'numpy', 'aiohttp', 'tqdm'}
+    # required = {'numpy', 'aiohttp', 'tqdm'}
+    required = {"numpy", "aiohttp", "tqdm", "huggingface_hub"}
     installed = {pkg.key for pkg in pkg_resources.working_set}
     missing = required - installed
 
@@ -174,8 +207,10 @@ def install_dependencies():
 
 if __name__ == "__main__":
     # Install dependencies first
-    import pkg_resources
+    
     install_dependencies()
     
     # Run main download process
-    asyncio.run(download_all_models()) 
+    asyncio.run(download_all_models())
+    # Download Whisper model(s)
+    download_whisper_models() 

@@ -190,7 +190,11 @@ def demix_new_wrapper(mix, device, model, config, dim_t=256, bigshifts=1):
         results.append(unshifted_vocals)
 
     vocals = np.mean(results, axis=0)
-    
+    # logger.info(f"/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/")
+    # logger.info(f"demix_new_wrapper vocals {vocals}")
+    # logger.info(f"demix_new_wrapper vocals.shape {vocals.shape}")
+    # logger.info(f"-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*")
+
     return vocals
 
 def demix_vitlarge(model, mix, device):
@@ -791,7 +795,6 @@ def predict_with_model(options):
         if len(audio.shape) == 1:
             audio = np.stack([audio, audio], axis=0)
         
-        
         if options['input_gain'] != 0:
             audio = dBgain(audio, options['input_gain'])
 
@@ -803,7 +806,9 @@ def predict_with_model(options):
             if options["restore_gain"] is True: #restoring original gain
                 result[instrum] = dBgain(result[instrum], -options['input_gain'])
             sf.write(output_folder + '/' + output_name, result[instrum], sample_rates[instrum], subtype=output_format)
-            print('File created: {}'.format(output_folder + '/' + output_name))
+            # print('File created /*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/')
+            # print('File created: {}'.format(output_folder + '/' + output_name))
+            # print('File created -*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*-*')
 
         # instrumental part 1
         # inst = (audio.T - result['vocals'])
@@ -917,4 +922,3 @@ def dBgain(audio, volume_gain_dB):
 #     print(f'output_format: {options["output_format"]}\n')
 #     predict_with_model(options)
 #     print('Time: {:.0f} sec'.format(time() - start_time))
-
