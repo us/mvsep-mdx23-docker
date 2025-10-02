@@ -31,11 +31,21 @@ A Docker-based implementation of the MVSEP-MDX23 music source separation model. 
   - Optional vocal filtering below 50Hz
   - Gain restoration option
 
+  **Lyrics Transcription (NEW)**
+  - High-accuracy Whisper large-v3 model
+  - Automatic language detection and optional alignment
+  - Save transcription results directly to S3
+  - We currently support English, Spanish and French (en,es,fr)
+
+
 ## Requirements
 
 - Docker
 - NVIDIA GPU with CUDA support
 - NVIDIA Container Toolkit (for GPU support)
+- input as audio with sample rate of 44100 and wav format
+
+
 
 ## Installation
 
@@ -58,14 +68,14 @@ docker build -t mvsep-mdx23 .
 Basic usage:
 ```bash
 docker run --gpus all -v /path/to/input:/input -v /path/to/output:/output mvsep-mdx23 \
-    --input_audio "/input/audio.mp3" \
+    --input_audio "audio.wav" \
     --output_folder "/output"
 ```
 
 Advanced usage with custom parameters:
 ```bash
 docker run --gpus all -v /path/to/input:/input -v /path/to/output:/output mvsep-mdx23 \
-    --input_audio "/input/audio.mp3" \
+    --input_audio "audio.wav" \
     --output_folder "/output" \
     --BSRoformer_model "ep_368_1296" \
     --weight_BSRoformer 9.18 \
@@ -75,10 +85,35 @@ docker run --gpus all -v /path/to/input:/input -v /path/to/output:/output mvsep-
     --BigShifts 3 \
     --input_gain 0
 ```
+windows cmd:
+docker run --gpus device=0 ^
+  -e AWS_ACCESS_KEY_ID=ACCESS_KEY ^
+  -e AWS_SECRET_ACCESS_KEY=ECRET_ACCESS_KEY ^
+  -e AWS_DEFAULT_REGION=REGION ^
+  -e WHISPER_MODEL=large-v3 ^
+  -e WHISPER_MODEL_CACHE=./models ^
+  -v /path/to/test_input.json:/test_input.json ^
+  mvsep-mdx23-test
+
+OR
+
+docker run --gpus all ^
+  -e AWS_ACCESS_KEY_ID=ACCESS_KEY ^
+  -e AWS_SECRET_ACCESS_KEY=ECRET_ACCESS_KEY ^
+  -e AWS_DEFAULT_REGION=REGION ^
+  -e WHISPER_MODEL=large-v3 ^
+  -e WHISPER_MODEL_CACHE=./models ^
+  -v /path/to/test_input.json:/test_input.json ^
+  mvsep-mdx23-test
+
+
+example json is in
+  input/test_input.json
+
 
 ### Parameters
 
-- `--input_audio`: Path to input audio file (inside container)
+- `--input_audio`: name of audio file (wav with sample rate of 44100)
 - `--output_folder`: Path to output directory (inside container)
 - `--output_format`: Output format (PCM_16, FLOAT, or FLAC)
 - `--vocals_only`: Only separate vocals/instrumental (omit for 4-STEMS mode)

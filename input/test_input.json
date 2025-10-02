@@ -1,0 +1,45 @@
+{
+  "input": {
+    "audio_url": "newDemo.wav",
+    "output_bucket": "output_bucket",
+    "output_prefix": "test_output",
+    "output_format": "FLAC",
+    "model_size": "large-v3",
+    "language": "-",
+    "vocal_gain_db": 6.0,
+    "align": true,
+    "notification": {
+      "enabled": false,
+      "fcm_token": "",
+      "credentials_url": ""
+    },
+    "options": {
+      "vocals_only": false,
+      "input_gain": 0,
+      "restore_gain": false,
+      "filter_vocals": false,
+      "BigShifts": 3,
+      "use_BSRoformer": true,
+      "BSRoformer_model": "ep_368_1296",
+      "weight_BSRoformer": 9.18,
+      "use_Kim_MelRoformer": true,
+      "weight_Kim_MelRoformer": 10,
+      "use_InstVoc": true,
+      "weight_InstVoc": 3.39,
+      "use_VitLarge": false,
+      "weight_VitLarge": 1,
+      "use_InstHQ4": false,
+      "weight_InstHQ4": 2,
+      "overlap_InstHQ4": 0.1,
+      "use_VOCFT": false,
+      "weight_VOCFT": 2,
+      "overlap_VOCFT": 0.1,
+      "overlap_demucs": 0.6,
+      "overlap_InstVoc": 0.8,
+      "overlap_VitLarge": 0.8,
+      "large_gpu": true,
+      "single_onnx": false,
+      "cpu": false
+    }
+  }
+}
