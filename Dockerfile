@@ -17,7 +17,8 @@ RUN apt-get update && \
     add-apt-repository ppa:deadsnakes/ppa && \
     apt-get update && \
     apt-get install -y --no-install-recommends \
-        python3.10 python3.10-distutils python3-pip \
+        python3.10 python3.10-distutils python3-pip python3.10-dev \
+        build-essential gcc g++ make \
         git ffmpeg curl libsndfile1 libcudnn8 libcudnn8-dev \
         nvidia-container-toolkit \
         libfftw3-dev libfftw3-3 \
