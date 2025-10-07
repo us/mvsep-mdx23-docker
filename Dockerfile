@@ -25,9 +25,13 @@ RUN apt-get update && \
 
 WORKDIR /
 
-# Install Python dependencies
+# Install uv for faster pip operations
+RUN pip install --no-cache-dir uv
+
+# Install Python dependencies with uv
 COPY builder/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --system Cython numpy
+RUN uv pip install --system -r requirements.txt
 
 # Create and copy model files
 COPY models/ /models/
