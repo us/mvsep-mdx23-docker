@@ -31,7 +31,7 @@ RUN pip install --no-cache-dir uv
 
 # Install Python dependencies with uv
 COPY builder/requirements.txt .
-RUN uv pip install --system "Cython" "numpy<2.0"
+RUN uv pip install --system "Cython" "numpy==2.1.3"
 RUN uv pip install --system --index-strategy unsafe-best-match -r requirements.txt
 
 # Create and copy model files
@@ -42,16 +42,6 @@ COPY src/handler.py .
 COPY src/inference.py .
 COPY src/chords_tempo.py .
 COPY src/modules/ ./modules/
-
-# Pre-download nltk punkt tokenizer to image
-RUN mkdir -p /usr/share/nltk_data && \
-    python3 -c "import nltk; nltk.download('punkt', download_dir='/usr/share/nltk_data')" && \
-    python3 -c "import nltk; nltk.data.path.append('/usr/share/nltk_data')"
-
-# Pre-download WhisperX large-v3 model
-RUN mkdir -p /models/whisper && \
-    python3 -c "import whisperx; whisperx.load_model('large-v3', 'cpu', compute_type='int8', download_root='/models/whisper')" && \
-    echo "WhisperX large-v3 model downloaded successfully"
 
 # Test CUDA availability
 RUN python3 -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda}')"
