@@ -31,7 +31,7 @@ RUN pip install --no-cache-dir uv
 # Install Python dependencies with uv
 COPY builder/requirements.txt .
 RUN uv pip install --system Cython numpy
-RUN uv pip install --system -r requirements.txt
+RUN uv pip install --system --index-strategy unsafe-best-match -r requirements.txt
 
 # Create and copy model files
 COPY models/ /models/
