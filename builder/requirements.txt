@@ -21,3 +21,4 @@ runpod==1.7.7
 static_ffmpeg==2.8
 pydub==0.25.1
 firebase-admin==6.6.0
+madmom>=0.17,<0.19

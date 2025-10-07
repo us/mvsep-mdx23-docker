@@ -20,6 +20,7 @@ RUN apt-get update && \
         python3.10 python3.10-distutils python3-pip \
         git ffmpeg curl libsndfile1 libcudnn8 libcudnn8-dev \
         nvidia-container-toolkit \
+        libfftw3-dev libfftw3-3 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /
@@ -34,6 +35,7 @@ COPY models/ /models/
 # Copy handler code
 COPY src/handler.py .
 COPY src/inference.py .
+COPY src/chords_tempo.py .
 COPY src/modules/ ./modules/
 
 # Pre-download nltk punkt tokenizer to image
