@@ -45,6 +45,8 @@ from modules.tfc_tdf_v3 import TFC_TDF_net, STFT
 from modules.segm_models import Segm_Models_Net
 from modules.bs_roformer import BSRoformer
 from modules.bs_roformer import MelBandRoformer
+from chords_tempo import analyze
+import whisperx
 
 # Initialize ffmpeg paths early
 static_ffmpeg.add_paths()
@@ -950,6 +952,72 @@ def handler(event):
         model = init_model(options)
         result = predict_with_model(options)
 
+        analysis_result = None
+        if input_data.get("enable_analysis", False):
+            try:
+                logger.info("Running chord/key/tempo analysis")
+
+                output_extension = 'flac' if output_format == 'FLAC' else 'wav'
+                vocals_filename = os.path.splitext(os.path.basename(processed_path))[0] + f'_vocals.{output_extension}'
+                vocals_path = os.path.join(workspace_dir, vocals_filename)
+
+                if os.path.exists(vocals_path):
+                    analysis_result = analyze(vocals_path, rounding=2)
+                    logger.info(f"Analysis complete: Key={analysis_result['key']}, Tempo={analysis_result['tempo']}, Chords={len(analysis_result['chords'])}")
+
+                    analysis_filename = os.path.splitext(os.path.basename(processed_path))[0] + '_analysis.json'
+                    analysis_path = os.path.join(workspace_dir, analysis_filename)
+                    with open(analysis_path, 'w') as f:
+                        json.dump(analysis_result, f, indent=2)
+                    logger.info(f"Analysis saved to: {analysis_filename}")
+                else:
+                    logger.warning(f"Vocals file not found for analysis: {vocals_path}")
+
+            except Exception as e:
+                logger.error(f"Error during analysis: {str(e)}")
+                logger.error(traceback.format_exc())
+
+        transcription_result = None
+        enable_lyrics = input_data.get("enable_lyrics", False)
+        if enable_lyrics and os.path.exists(vocals_path if 'vocals_path' in locals() else ''):
+            try:
+                logger.info("Running WhisperX transcription with large-v3 model on GPU")
+
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+                compute_type = "float16" if device == "cuda" else "int8"
+                batch_size = 16 if options.get("large_gpu", True) else 8
+
+                model = whisperx.load_model("large-v3", device, compute_type=compute_type, download_root="/models/whisper")
+                audio = whisperx.load_audio(vocals_path)
+
+                result = model.transcribe(audio, batch_size=batch_size)
+
+                del model
+                gc.collect()
+                if device == "cuda":
+                    torch.cuda.empty_cache()
+
+                model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device)
+                result = whisperx.align(result["segments"], model_a, metadata, audio, device, return_char_alignments=False)
+
+                del model_a
+                gc.collect()
+                if device == "cuda":
+                    torch.cuda.empty_cache()
+
+                transcription_result = result
+                logger.info(f"Transcription complete: {len(result['segments'])} segments, language={result.get('language')}")
+
+                transcription_filename = os.path.splitext(os.path.basename(processed_path))[0] + '_transcription.json'
+                transcription_path = os.path.join(workspace_dir, transcription_filename)
+                with open(transcription_path, 'w') as f:
+                    json.dump(transcription_result, f, indent=2)
+                logger.info(f"Transcription saved to: {transcription_filename}")
+
+            except Exception as e:
+                logger.error(f"Error during transcription: {str(e)}")
+                logger.error(traceback.format_exc())
+
         output_urls = {"s3": {}}
         output_files = [f for f in os.listdir(workspace_dir)
                        if os.path.isfile(os.path.join(workspace_dir, f))
@@ -978,10 +1046,25 @@ def handler(event):
                 }
             )
 
-        return {
+        response = {
             "output": output_urls,
             "sample_rate": sample_rate,
         }
+
+        if analysis_result:
+            response["analysis"] = {
+                "key": analysis_result.get("key"),
+                "tempo": analysis_result.get("tempo"),
+                "chords": analysis_result.get("chords", [])
+            }
+
+        if transcription_result:
+            response["transcription"] = {
+                "language": transcription_result.get("language"),
+                "segments": transcription_result.get("segments", [])
+            }
+
+        return response
 
     except Exception as e:
         logger.error(f"Error in handler: {str(e)}")
