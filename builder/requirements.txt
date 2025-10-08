@@ -6,8 +6,8 @@ librosa==0.10.2.post1
 demucs==4.0.1
 onnxruntime-gpu==1.20.1
 --extra-index-url https://download.pytorch.org/whl/cu124
-torch==2.4.1
-torchaudio==2.4.1
+# torch==2.4.1
+# torchaudio==2.4.1
 pyyaml==6.0.2
 ml_collections==1.0.0
 #pytorch_lightning
@@ -21,3 +21,14 @@ runpod==1.7.7
 static_ffmpeg==2.8
 pydub==0.25.1
 firebase-admin==6.6.0
+
+#new for whisperx
+nltk>=3.8
+torch==2.5.1
+torchaudio==2.5.1
+transformers==4.48.0
+# pytorch-lightning==2.5.5
+
+whisperx==3.4.3 
+openai-whisper>=20240930
+faster-whisper>=0.10.0
