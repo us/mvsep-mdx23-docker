@@ -22,6 +22,7 @@ from inference import EnsembleDemucsMDXMusicSeparationModel, predict_with_model
 from typing import Optional
 import subprocess
 import whisperx
+from chords_tempo import analyze
 
 
 
@@ -101,7 +102,7 @@ def get_system_usage():
             usage["mem_shared"] = mem_parts[4]
             usage["mem_cache"] = mem_parts[5]
             usage["mem_available"] = mem_parts[6]
-            
+
     except Exception as e:
         usage["error"] = str(e)
 
@@ -127,22 +128,22 @@ def download_from_s3(s3_client, s3_url, local_path):
 def init_firebase(s3_client=None, credentials_s3_url=None, workspace_dir=None):
     """Initialize Firebase app with service account credentials from S3 or local path"""
     global FIREBASE_APP
-    
+
     if FIREBASE_APP is not None:
         # Already initialized
         return True
-        
+
     try:
         # Determine credentials path
         cred_path = None
-        
+
         # If S3 URL is provided, download the credentials
         if credentials_s3_url and s3_client and workspace_dir:
             local_cred_path = os.path.join(workspace_dir, "firebase_credentials.json")
             if download_from_s3(s3_client, credentials_s3_url, local_cred_path):
                 cred_path = local_cred_path
                 logger.info(f"Downloaded Firebase credentials from {credentials_s3_url}")
-        
+
 
         # Initialize Firebase with credentials
         cred = credentials.Certificate(cred_path)
@@ -158,12 +159,12 @@ def send_notification(token, title, body, data=None):
     if not FIREBASE_APP:
         logger.warning("Firebase not initialized, skipping notification")
         return False
-    
+
     try:
         if not token:
             logger.warning("No FCM token provided, skipping notification")
             return False
-            
+
         message = messaging.Message(
             notification=messaging.Notification(
                 title=title,
@@ -172,7 +173,7 @@ def send_notification(token, title, body, data=None):
             data=data or {},
             token=token
         )
-        
+
         response = messaging.send(message)
         logger.info(f"Successfully sent notification: {response}")
         return True
@@ -205,19 +206,19 @@ def process_audio_file(input_path, workspace_dir):
     """Process audio file and return path to processed WAV file"""
     output_path = os.path.join(workspace_dir, "processed_audio.wav")
     logger.info(f"Processing audio file: {input_path}")
-    
+
     try:
         if input_path.lower().endswith('.m4a'):
             logger.info('Converting M4A to WAV')
             audio = AudioSegment.from_file(input_path, format="m4a")
             audio.export(output_path, format="wav", parameters=["-ac", "2", "-ar", "44100"])
-            
+
         elif input_path.lower().endswith('.mp4'):
             logger.info('Extracting audio from MP4')
             video = VideoFileClip(input_path, fps_source='tbr')
             video.audio.write_audiofile(output_path, fps=44100)
             video.close()
-            
+
         else:
             logger.info('Loading and converting audio file')
             audio, sr = librosa.load(input_path, sr=44100, mono=False)
@@ -255,7 +256,7 @@ def boost_and_resample(input_path: str, gain_db: float,workspace_dir:str) -> str
     """
 
     boosted_path= os.path.join(workspace_dir, "temp_vocals_boosted.wav")
-    
+
     try:
         subprocess.run([
             "ffmpeg", "-y",
@@ -276,16 +277,16 @@ def boost_and_resample(input_path: str, gain_db: float,workspace_dir:str) -> str
 def load_model(model_size: str, language: Optional[str]):
     """Load Whisper model with GPU optimization"""
     cache_key = f"{model_size}_{language if language else 'no_lang'}"
-    
+
     if cache_key in model_cache:
         logger.info(f"Using cached model: {cache_key}")
         return model_cache[cache_key]
-    
+
     try:
         if not ensure_model_cache_dir():
             logger.error(f"Model cache directory is not accessible")
             raise RuntimeError("Model cache directory is not accessible")
-        
+
 
         model = whisperx.load_model(
             model_size,
@@ -294,10 +295,10 @@ def load_model(model_size: str, language: Optional[str]):
             download_root=MODEL_CACHE_DIR,
             language=language if language and language != "-" else None
         )
-        
+
         model_cache[cache_key] = model
         return model
-    
+
     except Exception as e:
         logger.error(f"Model loading failed: {str(e)}")
         raise RuntimeError(f"Model loading failed: {str(e)}")
@@ -309,14 +310,14 @@ def load_alignment_model(language_code: str):
         return whisperx.load_align_model(language_code=language_code, device="cuda")
     except Exception as e:
         logger.warning(f"Failed to load default alignment model for {language_code}, trying fallback: {str(e)}")
-        
+
         # Define fallback models for specific languages
         fallback_models = {
             "hi": "theainerd/Wav2Vec2-large-xlsr-hindi",  # Hindi
             "pt": "jonatasgrosman/wav2vec2-large-xlsr-53-portuguese", # Portuguese
             "he": "imvladikon/wav2vec2-xls-r-300m-hebrew", # Hebrew
         }
-        
+
         if language_code in fallback_models:
             try:
                 # Try to load the fallback model
@@ -367,10 +368,10 @@ def transcribe_audio(audio_path: str, model_size: str, language: Optional[str], 
                     "error": "segments not found",
                     "status": False
                 }
-            
+
             # NEW: Fix missing word timestamps after alignment
             # result = fix_missing_word_timestamps(result)
-            
+
             return {
                 "text": " ".join(seg["text"] for seg in result["segments"]),
                 "segments": result["segments"],
@@ -379,14 +380,14 @@ def transcribe_audio(audio_path: str, model_size: str, language: Optional[str], 
                 "status": True,
                 "alignment_success": "alignment_error" not in result
             }
-        
+
         else:
             # ❌ not supported – return or raise an error
             return {
                 "error": f"Unsupported language: {detected_language}",
                 "status": False
             }
-         
+
     except Exception as e:
         logger.error(f"Transcription failed: {str(e)}")
        # raise RuntimeError(f"Transcription failed: {str(e)}")
@@ -398,7 +399,7 @@ def transcribe_audio(audio_path: str, model_size: str, language: Optional[str], 
 def save_response_to_s3(s3_client,output_dir,output_bucket,job_id, response_data, status="success"):
     """
     Save response to S3 bucket in the appropriate directory structure
-    
+
     Args:
         job_id: The ID of the job
         response_data: The response data to save
@@ -407,15 +408,15 @@ def save_response_to_s3(s3_client,output_dir,output_bucket,job_id, response_data
     if not output_bucket:
         logger.warning("S3_BUCKET not configured, skipping response save")
         return False
-    
+
     try:
         # Create the directory path
         directory_path = f"{output_dir}/{job_id}/lyrics/"
         file_key = f"{directory_path}response.json"
-        
+
         # Convert response to JSON string
         response_json = json.dumps(response_data, indent=2, ensure_ascii=False)
-        
+
         # Upload to S3
         s3_client.put_object(
             Bucket=output_bucket,
@@ -423,10 +424,10 @@ def save_response_to_s3(s3_client,output_dir,output_bucket,job_id, response_data
             Body=response_json,
             ContentType='application/json'
         )
-        
+
         logger.info(f"Response saved to S3: s3://{output_bucket}/{file_key}")
         return True
-        
+
     except Exception as e:
         logger.error(f"Failed to save response to S3: {str(e)}")
         return False
@@ -435,7 +436,7 @@ def handler(event):
     """RunPod handler function for audio separation"""
     workspace_dir = create_workspace()
     logger.info(f"Created workspace directory: {workspace_dir}")
-    
+
     # Extract notification settings from input
     input_data = event.get("input", {})
     notification_config = input_data.get("notification", {})
@@ -451,11 +452,11 @@ def handler(event):
         aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
         region_name=os.getenv("AWS_REGION")
     )
-    
+
     # Initialize Firebase if notifications are enabled
     if enable_notifications:
         init_firebase(s3_client, firebase_creds_url, workspace_dir)
-    
+
     try:
         # Extract input parameters
         audio_url = input_data["audio_url"]
@@ -467,20 +468,20 @@ def handler(event):
 
         # Extract song name from the audio URL
         song_name = os.path.basename(audio_url).split('.')[0]
-        
+
         # Download input file
         bucket_name, key = audio_url.replace("s3://", "").split("/", 1)
         input_path = os.path.join(workspace_dir, "input" + os.path.splitext(key)[1])
         logger.info(f"Downloading from S3: {audio_url}")
         s3_client.download_file(bucket_name, key, input_path)
-        
+
         # Process audio file
         processed_path = process_audio_file(input_path, workspace_dir)
-        
+
         # Get sample rate for output
         audio_info = sf.info(processed_path)
         sample_rate = audio_info.samplerate
-        
+
         # Set up model options
         options.update({
             "input_audio": [processed_path],
@@ -552,17 +553,47 @@ def handler(event):
         for output_file in output_files:
             local_path = os.path.join(workspace_dir, output_file)
             s3_key = f"{output_prefix}/{job_id}/{output_file}" if output_prefix else f"{job_id}/{output_file}"
-            
+
             if output_bucket:
                 logger.info(f"Uploading result: {output_file}")
                 s3_client.upload_file(local_path, output_bucket, s3_key)
                 output_urls["s3"][output_file] = f"s3://{output_bucket}/{s3_key}"
 
-        
+
         # save result  in s3
         transcribeResult["system_usage"] = get_system_usage()
         transcrib_upload = save_response_to_s3(s3_client,output_prefix,output_bucket,job_id, transcribeResult, "success")
         logger.info(f"transcrib file upload processed done: {transcrib_upload}")
+
+        # Chords, tempo, and key analysis
+        analysis_result = None
+        if input_data.get("enable_analysis", False):
+            try:
+                logger.info("Running chord/key/tempo analysis")
+
+                if os.path.exists(vocals_path):
+                    analysis_result = analyze(vocals_path, rounding=2)
+                    logger.info(f"Analysis complete: Key={analysis_result['key']}, Tempo={analysis_result['tempo']}, Chords={len(analysis_result['chords'])}")
+
+                    analysis_filename = os.path.splitext(os.path.basename(processed_path))[0] + '_analysis.json'
+                    analysis_path = os.path.join(workspace_dir, analysis_filename)
+                    with open(analysis_path, 'w') as f:
+                        json.dump(analysis_result, f, indent=2)
+                    logger.info(f"Analysis saved to: {analysis_filename}")
+
+                    # Upload analysis to S3
+                    if output_bucket:
+                        s3_key = f"{output_prefix}/{job_id}/{analysis_filename}" if output_prefix else f"{job_id}/{analysis_filename}"
+                        logger.info(f"Uploading analysis: {analysis_filename}")
+                        s3_client.upload_file(analysis_path, output_bucket, s3_key)
+                        output_urls["s3"][analysis_filename] = f"s3://{output_bucket}/{s3_key}"
+                        logger.info(f"Analysis uploaded to S3: {s3_key}")
+                else:
+                    logger.warning(f"Vocals file not found for analysis: {vocals_path}")
+
+            except Exception as e:
+                logger.error(f"Error during chord/key/tempo analysis: {str(e)}")
+                logger.error(traceback.format_exc())
 
         # Send completion notification with new message format
         if enable_notifications:
@@ -571,30 +602,39 @@ def handler(event):
                 f"'{song_name}' is ready!",
                 f"Vocals and instruments have been successfully separated ✅",
                 {
-                    "job_id": job_id, 
+                    "job_id": job_id,
                     "status": "completed",
                     "file_count": str(len(output_files)),
                     "sample_rate": str(sample_rate)
                 }
             )
 
-        return {
+        response = {
             "output": output_urls,
             "sample_rate": sample_rate,
         }
+
+        if analysis_result:
+            response["analysis"] = {
+                "key": analysis_result.get("key"),
+                "tempo": analysis_result.get("tempo"),
+                "chords": analysis_result.get("chords", [])
+            }
+
+        return response
 
     except Exception as e:
         logger.error(f"Error in handler: {str(e)}")
         exec_error = traceback.format_exc()
         print(exec_error)
-        
+
         # Extract song name for error message
         try:
             audio_url = input_data.get("audio_url", "")
             song_name = os.path.basename(audio_url).split('.')[0]
         except:
             song_name = "Unknown"
-        
+
 
         transcribeResult = {
                 "error": f"Separation failed for '{song_name}'",
@@ -605,7 +645,7 @@ def handler(event):
         transcribeResult["system_usage"] = get_system_usage()
         transcrib_upload = save_response_to_s3(s3_client,output_prefix,output_bucket,job_id, transcribeResult, "success")
         logger.info(f"transcrib file upload processed done: {transcrib_upload}")
-        
+
         # Send error notification with new message format
         if enable_notifications:
             send_notification(
@@ -614,7 +654,7 @@ def handler(event):
                 f"Separation failed for '{song_name}'. Please try again later ❌",
                 {"job_id": event.get("id", "unknown"), "status": "error", "error": str(e)}
             )
-            
+
         return {"error": str(e)}
 
     finally:
@@ -622,5 +662,4 @@ def handler(event):
         cleanup_workspace(workspace_dir)
 
 if __name__ == "__main__":
-    runpod.serverless.start({"handler": handler}) 
-    
+    runpod.serverless.start({"handler": handler})

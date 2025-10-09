@@ -8,6 +8,7 @@
     "language": "-",
     "vocal_gain_db": 6.0,
     "align": true,
+    "enable_analysis": true,
     "notification": {
       "enabled": true,
       "fcm_token": "f2KbhckoFU20hbkTipw6Be:APA91bHX8FVsMAGmDQGnTl3tf0vkU3ulhkMBN3q2AUt7FaKwFvSW7q1sxRvkRVNgDd57ys6aKjPLZxxaQ5xHHA6ndFeNU0bscVpnbzH1XtNzJOs5LmyKCqY",

@@ -16,6 +16,7 @@ import librosa
 import shutil
 
 from inference import EnsembleDemucsMDXMusicSeparationModel, predict_with_model
+from chords_tempo import analyze
 
 # Initialize ffmpeg paths early
 static_ffmpeg.add_paths()
@@ -130,6 +131,35 @@ def handler(event):
         model = init_model(options)
         result = predict_with_model(options)
 
+        # Run chord/key/tempo analysis if enabled
+        analysis_result = None
+        if input_data.get("enable_analysis", False):
+            try:
+                logger.info("Running chord/key/tempo analysis")
+
+                # Find the vocals file in workspace
+                output_extension = 'flac' if output_format == 'FLAC' else 'wav'
+                vocals_filename = os.path.splitext(os.path.basename(processed_path))[0] + f'_vocals.{output_extension}'
+                vocals_path = os.path.join(workspace_dir, vocals_filename)
+
+                if os.path.exists(vocals_path):
+                    # Run analysis on vocals track
+                    analysis_result = analyze(vocals_path, rounding=2)
+                    logger.info(f"Analysis complete: Key={analysis_result['key']}, Tempo={analysis_result['tempo']}, Chords={len(analysis_result['chords'])}")
+
+                    # Save analysis to JSON file
+                    analysis_filename = os.path.splitext(os.path.basename(processed_path))[0] + '_analysis.json'
+                    analysis_path = os.path.join(workspace_dir, analysis_filename)
+                    with open(analysis_path, 'w') as f:
+                        json.dump(analysis_result, f, indent=2)
+                    logger.info(f"Analysis saved to: {analysis_filename}")
+                else:
+                    logger.warning(f"Vocals file not found for analysis: {vocals_path}")
+
+            except Exception as e:
+                logger.error(f"Error during analysis: {str(e)}")
+                logger.error(traceback.format_exc())
+
         # Upload results
         output_urls = {"s3": {}}
         output_files = [f for f in os.listdir(workspace_dir)
@@ -146,10 +176,21 @@ def handler(event):
                 s3_client.upload_file(local_path, output_bucket, s3_key)
                 output_urls["s3"][output_file] = f"s3://{output_bucket}/{s3_key}"
 
-        return {
+        # Prepare response
+        response = {
             "output": output_urls,
             "sample_rate": sample_rate,
         }
+
+        # Add analysis results if available
+        if analysis_result:
+            response["analysis"] = {
+                "key": analysis_result.get("key"),
+                "tempo": analysis_result.get("tempo"),
+                "chords": analysis_result.get("chords", [])
+            }
+
+        return response
 
     except Exception as e:
         logger.error(f"Error in handler: {str(e)}")
@@ -168,7 +209,8 @@ if __name__ == "__main__":
         "audio_url": "s3://vocal-remover-runpod-version/test.mp3",
         "output_bucket": "vocal-remover-runpod-version",
         "output_prefix": "test_output",
-         "output_format": "MP3",  # Changed to match colab's FLAC setting
+        "output_format": "MP3",  # Changed to match colab's FLAC setting
+        "enable_analysis": True,  # Enable chord/key/tempo analysis
         "options": {
             # Core separation settings
             "vocals_only": True,      # Set for Vocals/Instrumental mode

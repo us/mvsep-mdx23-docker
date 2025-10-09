@@ -16,25 +16,24 @@ RUN apt-get update && \
     apt-get install -y software-properties-common && \
     add-apt-repository ppa:deadsnakes/ppa && \
     apt-get update && \
-    apt-get install -y \
-    python3.10 \
-    python3.10-distutils \
-    python3-pip \
-    git \
-    ffmpeg \
-    curl \
-    libsndfile1 \
-    libcudnn8 \
-    libcudnn8-dev \
-    nvidia-container-toolkit && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends \
+        python3.10 python3.10-distutils python3-pip \
+        python3.10-dev \
+        build-essential gcc g++ make \
+        git ffmpeg curl libsndfile1 libcudnn8 libcudnn8-dev \
+        nvidia-container-toolkit \
+        libfftw3-dev libfftw3-3 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/* 
 
 WORKDIR /
 
-# Install Python dependencies
+# Install uv for faster pip operations
+RUN pip install --no-cache-dir uv
+
+# Install Python dependencies with uv
 COPY builder/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN uv pip install --system "Cython" "numpy==2.1.3"
+RUN uv pip install --system --index-strategy unsafe-best-match -r requirements.txt
 
 # Create and copy model files
 COPY models/ /models/
@@ -42,10 +41,9 @@ COPY models/ /models/
 # Copy handler code
 COPY src/handler.py .
 COPY src/inference.py .
-
+COPY src/chords_tempo.py .
 COPY src/modules/ ./modules/
 
-# Install Python packages nltk first so first install requirements
 # Pre-download nltk punkt tokenizer to image
 RUN mkdir -p /usr/share/nltk_data && \
     python3 -c "import nltk; nltk.download('punkt', download_dir='/usr/share/nltk_data')" && \
