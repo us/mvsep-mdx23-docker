@@ -494,56 +494,7 @@ def handler(event):
         model = init_model(options)
         result = predict_with_model(options)
 
-
-
-        # generate lyrics with whisperx
-
-        # Find matching files
-        matches = [
-            f for f in os.listdir(workspace_dir)
-            if 'processed_audio_vocals' in f.lower()
-            and f.lower().endswith(('.wav', '.flac'))
-        ]
-
-        if not matches:
-            raise ValueError("Vocals file not found in workspace directory")
-
-        vocals_path = os.path.join(workspace_dir, matches[0])
-        logger.info(f"Found vocals file: {vocals_path}")
-
-
-        if not os.path.exists(vocals_path):
-            raise FileNotFoundError(f"Expected file does not exist: {vocals_path}")
-
-        logger.info(f"Using vocals file for transcription: {vocals_path}")
-
-        isVocalBoost = False
-        try:
-            processed_audio_path = boost_and_resample(vocals_path, vocal_gain_db, workspace_dir)
-            isVocalBoost= True
-        except Exception as e:
-            # prepare_audio already logs and falls back; this is just extra safety
-            logger.warning(f"prepare_audio_for_transcription error: {str(e)}")
-            isVocalBoost = False
-            processed_audio_path = vocals_path
-
-        transcribeResult = transcribe_audio(
-            processed_audio_path,
-            input_data.get("model_size", "large-v3"),
-            input_data.get("language", None),
-            input_data.get("align", False)
-        )
-
-        # --- delete the boosted temp file after use ---
-        try:
-            if os.path.exists(processed_audio_path):
-                if isVocalBoost:
-                    os.remove(processed_audio_path)
-                    logger.info(f"Deleted temporary processed file: {processed_audio_path}")
-        except Exception as cleanup_err:
-            logger.warning(f"Could not delete {processed_audio_path}: {cleanup_err}")
-
-        # Upload results
+        # Upload results first
         output_urls = {"s3": {}}
         output_files = [f for f in os.listdir(workspace_dir)
                        if os.path.isfile(os.path.join(workspace_dir, f))
@@ -559,41 +510,120 @@ def handler(event):
                 s3_client.upload_file(local_path, output_bucket, s3_key)
                 output_urls["s3"][output_file] = f"s3://{output_bucket}/{s3_key}"
 
+        # Lyrics with WhisperX (optional, don't fail if it errors)
+        transcribeResult = {}
+        try:
+            logger.info("Starting lyrics extraction with WhisperX")
 
-        # save result  in s3
-        transcribeResult["system_usage"] = get_system_usage()
-        transcrib_upload = save_response_to_s3(s3_client,output_prefix,output_bucket,job_id, transcribeResult, "success")
-        logger.info(f"transcrib file upload processed done: {transcrib_upload}")
+            # Find matching files
+            matches = [
+                f for f in os.listdir(workspace_dir)
+                if 'processed_audio_vocals' in f.lower()
+                and f.lower().endswith(('.wav', '.flac'))
+            ]
 
-        # Chords, tempo, and key analysis
+            if not matches:
+                raise ValueError("Vocals file not found in workspace directory")
+
+            vocals_path = os.path.join(workspace_dir, matches[0])
+            logger.info(f"Found vocals file: {vocals_path}")
+
+            if not os.path.exists(vocals_path):
+                raise FileNotFoundError(f"Expected file does not exist: {vocals_path}")
+
+            logger.info(f"Using vocals file for transcription: {vocals_path}")
+
+            isVocalBoost = False
+            try:
+                processed_audio_path = boost_and_resample(vocals_path, vocal_gain_db, workspace_dir)
+                isVocalBoost= True
+            except Exception as e:
+                logger.warning(f"prepare_audio_for_transcription error: {str(e)}")
+                isVocalBoost = False
+                processed_audio_path = vocals_path
+
+            transcribeResult = transcribe_audio(
+                processed_audio_path,
+                input_data.get("model_size", "large-v3"),
+                input_data.get("language", None),
+                input_data.get("align", False)
+            )
+
+            # Delete the boosted temp file after use
+            try:
+                if os.path.exists(processed_audio_path):
+                    if isVocalBoost:
+                        os.remove(processed_audio_path)
+                        logger.info(f"Deleted temporary processed file: {processed_audio_path}")
+            except Exception as cleanup_err:
+                logger.warning(f"Could not delete {processed_audio_path}: {cleanup_err}")
+
+            # Save lyrics result in s3
+            transcribeResult["system_usage"] = get_system_usage()
+            transcrib_upload = save_response_to_s3(s3_client,output_prefix,output_bucket,job_id, transcribeResult, "success")
+            logger.info(f"transcrib file upload processed done: {transcrib_upload}")
+
+        except Exception as e:
+            error_msg = f"Error during lyrics extraction: {str(e)}"
+            error_traceback = traceback.format_exc()
+            logger.error(error_msg)
+            logger.error(error_traceback)
+            transcribeResult = {
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "traceback": error_traceback,
+                "status": False
+            }
+
+        # Chords, tempo, and key analysis (optional, don't fail if it errors)
         analysis_result = None
         if input_data.get("enable_analysis", False):
             try:
                 logger.info("Running chord/key/tempo analysis")
 
-                if os.path.exists(vocals_path):
-                    analysis_result = analyze(vocals_path, rounding=2)
-                    logger.info(f"Analysis complete: Key={analysis_result['key']}, Tempo={analysis_result['tempo']}, Chords={len(analysis_result['chords'])}")
+                # Find vocals file again
+                matches = [
+                    f for f in os.listdir(workspace_dir)
+                    if 'processed_audio_vocals' in f.lower()
+                    and f.lower().endswith(('.wav', '.flac'))
+                ]
 
-                    analysis_filename = os.path.splitext(os.path.basename(processed_path))[0] + '_analysis.json'
-                    analysis_path = os.path.join(workspace_dir, analysis_filename)
-                    with open(analysis_path, 'w') as f:
-                        json.dump(analysis_result, f, indent=2)
-                    logger.info(f"Analysis saved to: {analysis_filename}")
+                if matches:
+                    vocals_path = os.path.join(workspace_dir, matches[0])
 
-                    # Upload analysis to S3
-                    if output_bucket:
-                        s3_key = f"{output_prefix}/{job_id}/{analysis_filename}" if output_prefix else f"{job_id}/{analysis_filename}"
-                        logger.info(f"Uploading analysis: {analysis_filename}")
-                        s3_client.upload_file(analysis_path, output_bucket, s3_key)
-                        output_urls["s3"][analysis_filename] = f"s3://{output_bucket}/{s3_key}"
-                        logger.info(f"Analysis uploaded to S3: {s3_key}")
+                    if os.path.exists(vocals_path):
+                        analysis_result = analyze(vocals_path, rounding=2)
+                        logger.info(f"Analysis complete: Key={analysis_result['key']}, Tempo={analysis_result['tempo']}, Chords={len(analysis_result['chords'])}")
+
+                        analysis_filename = os.path.splitext(os.path.basename(processed_path))[0] + '_analysis.json'
+                        analysis_path = os.path.join(workspace_dir, analysis_filename)
+                        with open(analysis_path, 'w') as f:
+                            json.dump(analysis_result, f, indent=2)
+                        logger.info(f"Analysis saved to: {analysis_filename}")
+
+                        # Upload analysis to S3
+                        if output_bucket:
+                            s3_key = f"{output_prefix}/{job_id}/{analysis_filename}" if output_prefix else f"{job_id}/{analysis_filename}"
+                            logger.info(f"Uploading analysis: {analysis_filename}")
+                            s3_client.upload_file(analysis_path, output_bucket, s3_key)
+                            output_urls["s3"][analysis_filename] = f"s3://{output_bucket}/{s3_key}"
+                            logger.info(f"Analysis uploaded to S3: {s3_key}")
+                    else:
+                        logger.warning(f"Vocals file not found for analysis: {vocals_path}")
                 else:
-                    logger.warning(f"Vocals file not found for analysis: {vocals_path}")
+                    logger.warning("No vocals file found for analysis")
 
             except Exception as e:
-                logger.error(f"Error during chord/key/tempo analysis: {str(e)}")
-                logger.error(traceback.format_exc())
+                error_msg = f"Error during chord/key/tempo analysis: {str(e)}"
+                error_traceback = traceback.format_exc()
+                logger.error(error_msg)
+                logger.error(error_traceback)
+                analysis_result = {
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "traceback": error_traceback,
+                    "status": False
+                }
 
         # Send completion notification with new message format
         if enable_notifications:
@@ -614,12 +644,23 @@ def handler(event):
             "sample_rate": sample_rate,
         }
 
+        # Add lyrics result (with error if any)
+        if transcribeResult:
+            response["lyrics"] = transcribeResult
+
+        # Add analysis result (with error if any)
         if analysis_result:
-            response["analysis"] = {
-                "key": analysis_result.get("key"),
-                "tempo": analysis_result.get("tempo"),
-                "chords": analysis_result.get("chords", [])
-            }
+            if "error" in analysis_result:
+                # Error occurred
+                response["analysis"] = analysis_result
+            else:
+                # Success
+                response["analysis"] = {
+                    "key": analysis_result.get("key"),
+                    "tempo": analysis_result.get("tempo"),
+                    "chords": analysis_result.get("chords", []),
+                    "status": True
+                }
 
         return response
 
