@@ -1,7 +1,7 @@
 {
   "input": {
-    "audio_url": "s3://music-key-chords-metronome-api/3C527D6F-4A90-4337-B4C9-9B68D200CF8C.wav",
-    "output_bucket": "music-key-chords-metronome-api",
+    "audio_url": "s3://vocal-remover-runpod-version/knocknock.mp3",
+    "output_bucket": "vocal-remover-runpod-version",
     "output_prefix": "test_output",
     "output_format": "FLAC",
     "model_size": "large-v3",

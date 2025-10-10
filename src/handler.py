@@ -567,39 +567,29 @@ def handler(event):
         analysis_result = None
         if input_data.get("enable_analysis", False):
             try:
-                logger.info("Running chord/key/tempo analysis")
+                logger.info("Running chord/key/tempo analysis on original audio")
 
-                # Find vocals file again
-                matches = [
-                    f for f in os.listdir(workspace_dir)
-                    if 'processed_audio_vocals' in f.lower()
-                    and f.lower().endswith(('.wav', '.flac'))
-                ]
+                # Use the original processed audio (full mix) for accurate analysis
+                # Tempo needs drums, chords need bass+instruments, key needs full mix
+                if os.path.exists(processed_path):
+                    analysis_result = analyze(processed_path, rounding=2)
+                    logger.info(f"Analysis complete: Key={analysis_result['key']}, Tempo={analysis_result['tempo']}, Chords={len(analysis_result['chords'])}")
 
-                if matches:
-                    vocals_path = os.path.join(workspace_dir, matches[0])
+                    analysis_filename = os.path.splitext(os.path.basename(processed_path))[0] + '_analysis.json'
+                    analysis_path = os.path.join(workspace_dir, analysis_filename)
+                    with open(analysis_path, 'w') as f:
+                        json.dump(analysis_result, f, indent=2)
+                    logger.info(f"Analysis saved to: {analysis_filename}")
 
-                    if os.path.exists(vocals_path):
-                        analysis_result = analyze(vocals_path, rounding=2)
-                        logger.info(f"Analysis complete: Key={analysis_result['key']}, Tempo={analysis_result['tempo']}, Chords={len(analysis_result['chords'])}")
-
-                        analysis_filename = os.path.splitext(os.path.basename(processed_path))[0] + '_analysis.json'
-                        analysis_path = os.path.join(workspace_dir, analysis_filename)
-                        with open(analysis_path, 'w') as f:
-                            json.dump(analysis_result, f, indent=2)
-                        logger.info(f"Analysis saved to: {analysis_filename}")
-
-                        # Upload analysis to S3
-                        if output_bucket:
-                            s3_key = f"{output_prefix}/{job_id}/{analysis_filename}" if output_prefix else f"{job_id}/{analysis_filename}"
-                            logger.info(f"Uploading analysis: {analysis_filename}")
-                            s3_client.upload_file(analysis_path, output_bucket, s3_key)
-                            output_urls["s3"][analysis_filename] = f"s3://{output_bucket}/{s3_key}"
-                            logger.info(f"Analysis uploaded to S3: {s3_key}")
-                    else:
-                        logger.warning(f"Vocals file not found for analysis: {vocals_path}")
+                    # Upload analysis to S3
+                    if output_bucket:
+                        s3_key = f"{output_prefix}/{job_id}/{analysis_filename}" if output_prefix else f"{job_id}/{analysis_filename}"
+                        logger.info(f"Uploading analysis: {analysis_filename}")
+                        s3_client.upload_file(analysis_path, output_bucket, s3_key)
+                        output_urls["s3"][analysis_filename] = f"s3://{output_bucket}/{s3_key}"
+                        logger.info(f"Analysis uploaded to S3: {s3_key}")
                 else:
-                    logger.warning("No vocals file found for analysis")
+                    logger.warning(f"Original audio file not found for analysis: {processed_path}")
 
             except Exception as e:
                 error_msg = f"Error during chord/key/tempo analysis: {str(e)}"
