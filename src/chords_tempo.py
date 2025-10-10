@@ -46,7 +46,7 @@ def detect_tempo(audio_path: str | Path) -> int:
     tempo_processor = madmom.features.tempo.TempoEstimationProcessor(fps=200)
     tempos = tempo_processor(beats)
 
-    if tempos:
+    if len(tempos) > 0:
         tempo = tempos[0][0]
         while tempo < 70:
             tempo *= 2

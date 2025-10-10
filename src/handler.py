@@ -338,55 +338,43 @@ def transcribe_audio(audio_path: str, model_size: str, language: Optional[str], 
         model = load_model(model_size, language)
         result = model.transcribe(audio_path, batch_size=BATCH_SIZE)
         detected_language = result.get("language", language if language else "en")
-        # assuming detected_language is a language code like "en", "es", or "fr"
-        allowed_langs = {"en", "es", "fr"}   # English, Spanish, French
 
+        # Languages with alignment support
+        alignment_supported_langs = {"en", "es", "fr"}
 
-        if detected_language in allowed_langs:
-            # ✅ language is supported – run transcription
-            if align and detected_language != "unknown":
-                try:
-                    align_model, metadata = load_alignment_model(detected_language)
-                    result = whisperx.align(
-                        result["segments"],
-                        align_model,
-                        metadata,
-                        audio_path,
-                        device="cuda",
-                        return_char_alignments=False
-                    )
-                except Exception as e:
-                    logger.error(f"Alignment skipped: {str(e)}")
-                    # Continue without alignment if it fails
-                    return {
-                        "error": f"alignment failed: {str(e)}",
-                        "status": False
-                    }
+        # Try alignment if requested and language is supported
+        alignment_success = False
+        if align and detected_language in alignment_supported_langs and detected_language != "unknown":
+            try:
+                align_model, metadata = load_alignment_model(detected_language)
+                result = whisperx.align(
+                    result["segments"],
+                    align_model,
+                    metadata,
+                    audio_path,
+                    device="cuda",
+                    return_char_alignments=False
+                )
+                alignment_success = True
+            except Exception as e:
+                logger.warning(f"Alignment skipped for {detected_language}: {str(e)}")
+                # Continue without alignment
 
-            if not result.get("segments") or len(result["segments"]) == 0:
-                return {
-                    "error": "segments not found",
-                    "status": False
-                }
-
-            # NEW: Fix missing word timestamps after alignment
-            # result = fix_missing_word_timestamps(result)
-
+        if not result.get("segments") or len(result["segments"]) == 0:
             return {
-                "text": " ".join(seg["text"] for seg in result["segments"]),
-                "segments": result["segments"],
-                "language": detected_language,
-                "model": model_size,
-                "status": True,
-                "alignment_success": "alignment_error" not in result
-            }
-
-        else:
-            # ❌ not supported – return or raise an error
-            return {
-                "error": f"Unsupported language: {detected_language}",
+                "error": "segments not found",
                 "status": False
             }
+
+        return {
+            "text": " ".join(seg["text"] for seg in result["segments"]),
+            "segments": result["segments"],
+            "language": detected_language,
+            "model": model_size,
+            "status": True,
+            "alignment_success": alignment_success,
+            "alignment_note": None if detected_language in alignment_supported_langs else f"Alignment not available for language: {detected_language}"
+        }
 
     except Exception as e:
         logger.error(f"Transcription failed: {str(e)}")
