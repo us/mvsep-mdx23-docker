@@ -632,11 +632,13 @@ def handler(event):
                 # Error occurred
                 response["analysis"] = analysis_result
             else:
-                # Success
+                # Success - include S3 path for the analysis JSON file
+                analysis_filename = os.path.splitext(os.path.basename(processed_path))[0] + '_analysis.json'
                 response["analysis"] = {
                     "key": analysis_result.get("key"),
                     "tempo": analysis_result.get("tempo"),
                     "chords": analysis_result.get("chords", []),
+                    "s3_path": output_urls["s3"].get(analysis_filename),
                     "status": True
                 }
 
