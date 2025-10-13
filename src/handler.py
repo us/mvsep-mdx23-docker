@@ -420,6 +420,43 @@ def save_response_to_s3(s3_client,output_dir,output_bucket,job_id, response_data
         logger.error(f"Failed to save response to S3: {str(e)}")
         return False
 
+def update_status_in_s3(s3_client, output_bucket, output_prefix, job_id, status_data):
+    """
+    Upload status.json to S3 showing completion status of all processing stages
+
+    Args:
+        s3_client: boto3 S3 client
+        output_bucket: S3 bucket name
+        output_prefix: Output prefix path
+        job_id: Job ID
+        status_data: Dictionary with status for each process type
+    """
+    if not output_bucket:
+        logger.warning("S3_BUCKET not configured, skipping status update")
+        return False
+
+    try:
+        # Create the file key for status.json
+        s3_key = f"{output_prefix}/{job_id}/status.json" if output_prefix else f"{job_id}/status.json"
+
+        # Convert status to JSON string
+        status_json = json.dumps(status_data, indent=2)
+
+        # Upload to S3
+        s3_client.put_object(
+            Bucket=output_bucket,
+            Key=s3_key,
+            Body=status_json,
+            ContentType='application/json'
+        )
+
+        logger.info(f"Status updated in S3: s3://{output_bucket}/{s3_key}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to update status in S3: {str(e)}")
+        return False
+
 def handler(event):
     """RunPod handler function for audio separation"""
     workspace_dir = create_workspace()
@@ -440,6 +477,13 @@ def handler(event):
         aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
         region_name=os.getenv("AWS_REGION")
     )
+
+    # Initialize processing status tracker
+    processing_status = {
+        "chords": False,
+        "lyrics": False,
+        "stems": False
+    }
 
     # Initialize Firebase if notifications are enabled
     if enable_notifications:
@@ -498,6 +542,11 @@ def handler(event):
                 s3_client.upload_file(local_path, output_bucket, s3_key)
                 output_urls["s3"][output_file] = f"s3://{output_bucket}/{s3_key}"
 
+        # Update status: stems completed successfully
+        processing_status["stems"] = True
+        update_status_in_s3(s3_client, output_bucket, output_prefix, job_id, processing_status)
+        logger.info("Stems processing completed successfully")
+
         # Lyrics with WhisperX (optional, don't fail if it errors)
         transcribeResult = {}
         try:
@@ -551,6 +600,12 @@ def handler(event):
             transcrib_upload = save_response_to_s3(s3_client,output_prefix,output_bucket,job_id, transcribeResult, "success")
             logger.info(f"transcrib file upload processed done: {transcrib_upload}")
 
+            # Update status: lyrics completed successfully (only if transcription was successful)
+            if transcribeResult.get("status", False):
+                processing_status["lyrics"] = True
+                update_status_in_s3(s3_client, output_bucket, output_prefix, job_id, processing_status)
+                logger.info("Lyrics processing completed successfully")
+
         except Exception as e:
             error_msg = f"Error during lyrics extraction: {str(e)}"
             error_traceback = traceback.format_exc()
@@ -562,6 +617,10 @@ def handler(event):
                 "traceback": error_traceback,
                 "status": False
             }
+            # Update status: lyrics failed with error
+            processing_status["lyrics"] = "error"
+            update_status_in_s3(s3_client, output_bucket, output_prefix, job_id, processing_status)
+            logger.info("Lyrics processing failed with error")
 
         # Chords, tempo, and key analysis (optional, don't fail if it errors)
         analysis_result = None
@@ -588,6 +647,11 @@ def handler(event):
                         s3_client.upload_file(analysis_path, output_bucket, s3_key)
                         output_urls["s3"][analysis_filename] = f"s3://{output_bucket}/{s3_key}"
                         logger.info(f"Analysis uploaded to S3: {s3_key}")
+
+                    # Update status: chords/analysis completed successfully
+                    processing_status["chords"] = True
+                    update_status_in_s3(s3_client, output_bucket, output_prefix, job_id, processing_status)
+                    logger.info("Chords/analysis processing completed successfully")
                 else:
                     logger.warning(f"Original audio file not found for analysis: {processed_path}")
 
@@ -602,6 +666,10 @@ def handler(event):
                     "traceback": error_traceback,
                     "status": False
                 }
+                # Update status: chords/analysis failed with error
+                processing_status["chords"] = "error"
+                update_status_in_s3(s3_client, output_bucket, output_prefix, job_id, processing_status)
+                logger.info("Chords/analysis processing failed with error")
 
         # Send completion notification with new message format
         if enable_notifications:
@@ -617,9 +685,14 @@ def handler(event):
                 }
             )
 
+        # Final status update before returning response
+        update_status_in_s3(s3_client, output_bucket, output_prefix, job_id, processing_status)
+        logger.info(f"Final processing status: {processing_status}")
+
         response = {
             "output": output_urls,
             "sample_rate": sample_rate,
+            "status": processing_status
         }
 
         # Add lyrics result (with error if any)
@@ -656,6 +729,9 @@ def handler(event):
         except:
             song_name = "Unknown"
 
+        # If stems processing failed (never set to true), mark as error
+        if processing_status["stems"] == False:
+            processing_status["stems"] = "error"
 
         transcribeResult = {
                 "error": f"Separation failed for '{song_name}'",
@@ -666,6 +742,10 @@ def handler(event):
         transcribeResult["system_usage"] = get_system_usage()
         transcrib_upload = save_response_to_s3(s3_client,output_prefix,output_bucket,job_id, transcribeResult, "success")
         logger.info(f"transcrib file upload processed done: {transcrib_upload}")
+
+        # Update final status even in error case to show what was completed before failure
+        update_status_in_s3(s3_client, output_bucket, output_prefix, job_id, processing_status)
+        logger.info(f"Final processing status (error case): {processing_status}")
 
         # Send error notification with new message format
         if enable_notifications:
